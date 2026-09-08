@@ -24,7 +24,7 @@
 # (int) Minimum Android API
  android.minapi = 23
 # (str) Android architecture
- android.arch = arm64-v8a
+ android.archs = arm64-v8a
 # (str) Presplash
  # presplash.filename = %(source.dir)s/data/presplash.png
 # (str) Icon
