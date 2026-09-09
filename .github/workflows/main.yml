@@ -24,36 +24,18 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential libffi-dev libssl-dev ccache git unzip zip zlib1g-dev openjdk-17-jdk autoconf libtool pkg-config wget
         pip install --upgrade pip
         pip install cython==0.29.36 buildozer
 
-    - name: Setup Android SDK Tools & Licenses
-      run: |
-        # SDK கோப்பகங்களை உருவாக்குதல்
-        mkdir -p ~/.buildozer/android/platform/android-sdk/cmdline-tools
-        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-
-        # Android commandlinetools பதிவிறக்கம் செய்தல்
-        cd ~/.buildozer/android/platform/android-sdk/cmdline-tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O commandlinetools.zip
-        unzip -q commandlinetools.zip
-        rm commandlinetools.zip
-        mv cmdline-tools latest
-
-        # பழைய பாதைக்காக (legacy tools/bin/sdkmanager) Symbolic Link உருவாக்குதல்
-        mkdir -p ~/.buildozer/android/platform/android-sdk/tools
-        ln -s ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin ~/.buildozer/android/platform/android-sdk/tools/bin
-
-        # SDK உரிமங்களை (Licenses) தானாக ஏற்றுக்கொண்டு அமைத்தல்
-        yes | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-    - name: Build with Buildozer
-      run: |
-        buildozer -v android debug
+    - name: Build with Buildozer Action
+      uses: ArsenStrikers/buildozer-action@v1
+      with:
+        command: buildozer -v android debug
+        buildozer_version: master
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
