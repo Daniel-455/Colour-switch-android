@@ -27,15 +27,29 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential libffi-dev libssl-dev ccache git unzip zip zlib1g-dev openjdk-17-jdk autoconf libtool pkg-config
+        sudo apt-get install -y build-essential libffi-dev libssl-dev ccache git unzip zip zlib1g-dev openjdk-17-jdk autoconf libtool pkg-config wget
         pip install --upgrade pip
         pip install cython==0.29.36 buildozer
 
-    - name: Pre-accept Android SDK Licenses
+    - name: Setup Android SDK Tools & Licenses
       run: |
+        # SDK கோப்பகங்களை உருவாக்குதல்
+        mkdir -p ~/.buildozer/android/platform/android-sdk/cmdline-tools
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        echo -e "\n89330d1722371cd37a7352da2820c19e1b764031\n5601269018d0a26e09f62809f192e6c2e177ed21\n79124ee27d0b870cf154564c16264850113ea050\n84831b9409646a918e30573bab4c9c91346d8abd\n497367f3e58d135d91514572c8938869b4760572\nd9754551b78070a1a1437298e22482701149b6f4\n090480372611571993b816385d51fb437e39e637" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+
+        # Android commandlinetools பதிவிறக்கம் செய்தல்
+        cd ~/.buildozer/android/platform/android-sdk/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O commandlinetools.zip
+        unzip -q commandlinetools.zip
+        rm commandlinetools.zip
+        mv cmdline-tools latest
+
+        # பழைய பாதைக்காக (legacy tools/bin/sdkmanager) Symbolic Link உருவாக்குதல்
+        mkdir -p ~/.buildozer/android/platform/android-sdk/tools
+        ln -s ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin ~/.buildozer/android/platform/android-sdk/tools/bin
+
+        # SDK உரிமங்களை (Licenses) தானாக ஏற்றுக்கொண்டு அமைத்தல்
+        yes | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
     - name: Build with Buildozer
       run: |
