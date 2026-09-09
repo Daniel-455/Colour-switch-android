@@ -20,7 +20,6 @@
 # (str) Android app permissions
  android.permissions = INTERNET
 # (int) Target Android API
- android.api = 35
 # (int) Minimum Android API
  android.minapi = 23
 # (str) Android architecture
