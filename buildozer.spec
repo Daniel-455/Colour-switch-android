@@ -25,6 +25,10 @@
  android.minapi = 23
 # (str) Android architecture
  android.archs = arm64-v8a
+ android.api = 35
+android.minapi = 23
+android.archs = arm64-v8a
+android.accept_sdk_license = True
 # (str) Presplash
  # presplash.filename = %(source.dir)s/data/presplash.png
 # (str) Icon
