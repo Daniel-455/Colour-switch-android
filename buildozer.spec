@@ -16,7 +16,6 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 
 # (list) Application requirements
-# comma separated e.g. requirements = sqlite3,kivy
 requirements = python3,kivy==2.3.0
 
 # (str) Version of the application
@@ -29,31 +28,31 @@ orientation = portrait
 # Android specific
 #
 
-# (int) Target Android API, should be as high as possible.
+# (int) Target Android API
 android.api = 34
 
-# (int) Minimum API your APK / AAB will support.
+# (int) Minimum API support
 android.minapi = 23
 
-# (str) Android SDK build tools version to use
+# (str) Android NDK version (r25b is recommended for stability)
+android.ndk = 25b
+
+# (str) Android SDK build tools version
 android.sdk_build_tools_version = 34.0.0
 
-# (bool) If True, automatically accept the SDK license
+# (bool) Automatically accept SDK license
 android.accept_sdk_license = True
 
-# (list) Permissions
-#android.permissions = INTERNET
-
-# (list) aab archs
+# (list) Supported architectures
 android.archs = arm64-v8a
 
-# (str) python-for-android branch to use
+# (str) python-for-android branch
 p4a.branch = master
 
 [buildozer]
 
-# (int) Log level (0 = error, 1 = info, 2 = debug (with command output))
+# (int) Log level (0 = error, 1 = info, 2 = debug)
 log_level = 2
 
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+# (int) Display warning if buildozer is run as root
 warn_on_root = 0
