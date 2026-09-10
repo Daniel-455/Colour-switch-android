@@ -37,9 +37,12 @@ android.api = 33
 android.minapi = 21
 
 # (str) Android NDK version
-android.ndk = 23b
+android.ndk = 25b
 
-# (list) Architectures to build for (Only 64-bit for faster & error-free build)
+# (str) p4a branch (Fixes build failures on GitHub Actions)
+p4a.branch = master
+
+# (list) Architectures to build for
 android.archs = arm64-v8a
 
 # (bool) Accept SDK licenses
