@@ -2,29 +2,25 @@
 
 title = Color Switch
 package.name = colorswitch
-package.domain = org.colorswitch
+package.domain = org.test
 
 source.dir = .
-source.main = main.py
-
-version = 1.0.0
+source.include_exts = py,png,jpg,kv,atlas
 
 requirements = python3,kivy==2.3.0
 
+version = 0.1
 orientation = portrait
-fullscreen = 1
 
-android.permissions = INTERNET
-android.api = 35
+android.api = 34
 android.minapi = 23
-android.archs = arm64-v8a
+android.ndk = 25b
+android.sdk_build_tools_version = 34.0.0
 android.accept_sdk_license = True
+android.archs = arm64-v8a
 
-# presplash.filename = %(source.dir)s/data/presplash.png
-# icon.filename = %(source.dir)s/data/icon.png
-
+p4a.branch = master
 
 [buildozer]
-
 log_level = 2
-warn_on_root = 1
+warn_on_root = 0
