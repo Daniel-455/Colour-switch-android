@@ -24,34 +24,27 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install system dependencies
+    - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          git \
-          zip \
-          unzip \
-          openjdk-17-jdk \
-          autoconf \
-          automake \
-          libtool \
-          pkg-config \
-          zlib1g-dev \
-          libncurses5-dev \
-          libncursesw5-dev \
-          cmake \
-          libffi-dev \
-          libssl-dev \
-          ccache \
-          wget
-
-    - name: Install Buildozer
-      run: |
+        sudo apt-get install -y build-essential libffi-dev libssl-dev ccache git unzip zip zlib1g-dev openjdk-17-jdk autoconf libtool pkg-config wget
         pip install --upgrade pip
-        pip install buildozer cython==0.29.36
+        pip install cython==0.29.36 buildozer
 
-    - name: Build APK
+    - name: Install Android SDK Command-line Tools
+      run: |
+        mkdir -p ~/.buildozer/android/platform/android-sdk/cmdline-tools
+        cd ~/.buildozer/android/platform/android-sdk/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O commandlinetools.zip
+        unzip -q commandlinetools.zip
+        rm commandlinetools.zip
+        mv cmdline-tools latest
+
+    - name: Accept All SDK Licenses
+      run: |
+        yes | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$HOME/.buildozer/android/platform/android-sdk || true
+
+    - name: Build with Buildozer
       run: |
         buildozer -v android debug
 
@@ -60,3 +53,4 @@ jobs:
       with:
         name: python-kivy-app
         path: bin/*.apk
+        
