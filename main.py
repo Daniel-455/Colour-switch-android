@@ -1,3 +1,4 @@
+import os
 from random import choice
 
 from kivy.app import App
@@ -50,12 +51,20 @@ class ColorSwitchApp(App):
     timer_event = None
     next_round_event = None
 
+    def get_score_file_path(self):
+        # Android & Desktop compatibility for file saving
+        return os.path.join(self.user_data_dir, "best_score.txt")
+
     def build(self):
         Window.clearcolor = (1, 1, 1, 1)
         self.title = "COLOR SWITCH"
+        
+        # Load best score safely
+        score_file = self.get_score_file_path()
         try:
-            with open("best_score.txt", "r", encoding="utf-8") as f:
-                self.best_score = int(f.read().strip() or 0)
+            if os.path.exists(score_file):
+                with open(score_file, "r", encoding="utf-8") as f:
+                    self.best_score = int(f.read().strip() or 0)
         except (OSError, ValueError):
             self.best_score = 0
 
@@ -130,7 +139,7 @@ class ColorSwitchApp(App):
         self.clear_content()
         self.mode_label.text = self.mode_label.text or "COLOR SWITCH"
         self.ball = Ball(size_hint_y=1)
-        self.word_label = Label(font_size="16sp", bold=True, color=(1, 1, 1, 1), size_hint=(None, None), size=(100, 45))
+        self.word_label = Label(font_size="20sp", bold=True, color=(1, 1, 1, 1), size_hint=(None, None), size=(120, 50))
         self.ball.add_widget(self.word_label)
         self.word_label.center = self.ball.center
         self.ball.bind(pos=self.center_word, size=self.center_word)
@@ -179,7 +188,7 @@ class ColorSwitchApp(App):
             if self.score > self.best_score:
                 self.best_score = self.score
                 try:
-                    with open("best_score.txt", "w", encoding="utf-8") as f:
+                    with open(self.get_score_file_path(), "w", encoding="utf-8") as f:
                         f.write(str(self.best_score))
                 except OSError:
                     pass
@@ -208,3 +217,4 @@ class ColorSwitchApp(App):
 
 if __name__ == "__main__":
     ColorSwitchApp().run()
+        
