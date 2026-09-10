@@ -31,16 +31,13 @@ fullscreen = 0
 android.permissions = INTERNET
 
 # (int) Target Android API
-android.api = 33
+android.api = 31
 
 # (int) Minimum API
 android.minapi = 21
 
 # (str) Android NDK version
-android.ndk = 25b
-
-# (str) p4a branch (Fixes build failures on GitHub Actions)
-p4a.branch = master
+android.ndk = 23b
 
 # (list) Architectures to build for
 android.archs = arm64-v8a
