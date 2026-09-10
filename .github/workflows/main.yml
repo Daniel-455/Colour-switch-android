@@ -13,15 +13,50 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build with Buildozer
-      uses: kivy/buildozer-action@v1
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        command: buildozer -v android debug
-        buildozer_version: stable
+        python-version: '3.11'
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          zip \
+          unzip \
+          openjdk-17-jdk \
+          autoconf \
+          automake \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          cmake \
+          libffi-dev \
+          libssl-dev \
+          ccache \
+          wget
+
+    - name: Install Buildozer
+      run: |
+        pip install --upgrade pip
+        pip install buildozer cython==0.29.36
+
+    - name: Build APK
+      run: |
+        buildozer -v android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: python-kivy-app
         path: bin/*.apk
-        
