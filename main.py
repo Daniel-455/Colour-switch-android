@@ -2,221 +2,220 @@ import random
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
-from kivy.uix.button import Button
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
+from kivy.uix.button import Button
+from kivy.uix.widget import Widget
 from kivy.graphics import Color, Ellipse, Rectangle
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.storage.jsonstore import JsonStore
 
-# Dark Modern Background Color
-DARK_BG = (0.12, 0.14, 0.18, 1)
-Window.clearcolor = DARK_BG
+# Dark Neon Background setup
+Window.clearcolor = (0.07, 0.07, 0.09, 1)
 
-COLOR_MAP = {
-    "RED": (1, 0.25, 0.25, 1),
-    "BLUE": (0.2, 0.5, 1, 1),
-    "GREEN": (0.1, 0.85, 0.45, 1),
-    "YELLOW": (1, 0.8, 0.1, 1)
+COLORS = {
+    "RED": (1.0, 0.2, 0.3, 1),
+    "BLUE": (0.2, 0.5, 1.0, 1),
+    "GREEN": (0.2, 0.8, 0.4, 1),
+    "YELLOW": (1.0, 0.8, 0.1, 1)
 }
 
 COLOR_NAMES = ["RED", "BLUE", "GREEN", "YELLOW"]
 
-class HueStrikeGame(BoxLayout):
+class CircleWidget(Widget):
     def __init__(self, **kwargs):
-        super().__init__(orientation='vertical', padding=[20, 15, 20, 15], spacing=10, **kwargs)
+        super(CircleWidget, self).__init__(**kwargs)
+        self.circle_color = (1, 1, 1, 1)
+        self.bind(pos=self.update_canvas, size=self.update_canvas)
 
-        self.store = JsonStore('best_score.json')
-        self.best_score = self.store.get('score')['best'] if self.store.exists('score') else 0
+    def set_color(self, color_tuple):
+        self.circle_color = color_tuple
+        self.update_canvas()
 
+    def update_canvas(self, *args):
+        self.canvas.clear()
+        with self.canvas:
+            Color(*self.circle_color)
+            size = min(self.width, self.height) * 0.75
+            x = self.center_x - size / 2
+            y = self.center_y - size / 2
+            Ellipse(pos=(x, y), size=(size, size))
+
+class HueStrikeApp(App):
+    def build(self):
+        self.title = "Hue Strike"
         self.score = 0
+        self.best_score = self.load_best_score()
         self.correct_count = 0
         self.time_left = 5
         self.game_mode = ""
         self.easy_mode = ""
         self.timer_event = None
-        self.correct_answer = ""
-        self.bg_color = DARK_BG
 
-        # Dynamic Background Setup
-        with self.canvas.before:
-            self.bg_canvas_color = Color(*self.bg_color)
-            self.bg_rect = Rectangle(pos=self.pos, size=self.size)
-        self.bind(pos=self.update_rect, size=self.update_rect)
+        self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
         # Header Title
-        self.title_label = Label(text="HUE STRIKE", font_size='26sp', bold=True, color=(1, 1, 1, 1), size_hint=(1, 0.08))
-        self.add_widget(self.title_label)
+        self.title_label = Label(
+            text="HUE STRIKE",
+            font_size='28sp',
+            bold=True,
+            color=(0.1, 0.9, 0.9, 1),
+            size_hint=(1, 0.08)
+        )
+        self.main_layout.add_widget(self.title_label)
 
-        # Score & Timer Header Bar
-        stats_bar = BoxLayout(orientation='horizontal', size_hint=(1, 0.06))
-        self.score_label = Label(text="Score: 0", font_size='16sp', bold=True, color=(0.8, 0.8, 0.8, 1))
-        self.best_label = Label(text=f"Best: {self.best_score}", font_size='16sp', bold=True, color=(1, 0.8, 0.2, 1))
-        self.timer_label = Label(text="Time: 5s", font_size='16sp', bold=True, color=(1, 0.3, 0.3, 1))
-        stats_bar.add_widget(self.score_label)
-        stats_bar.add_widget(self.best_label)
-        stats_bar.add_widget(self.timer_label)
-        self.add_widget(stats_bar)
+        # Score & Timer Panel
+        self.info_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.06))
+        self.score_label = Label(text="Score: 0", font_size='18sp', color=(1, 1, 1, 1))
+        self.best_label = Label(text=f"Best: {self.best_score}", font_size='18sp', color=(1, 0.8, 0.2, 1))
+        self.timer_label = Label(text="Time: 5", font_size='18sp', color=(1, 0.3, 0.3, 1))
 
-        # Mode Label
-        self.mode_label = Label(text="Select Mode to Start", font_size='15sp', bold=True, color=(0.7, 0.8, 1, 1), size_hint=(1, 0.06))
-        self.add_widget(self.mode_label)
+        self.info_layout.add_widget(self.score_label)
+        self.info_layout.add_widget(self.best_label)
+        self.info_layout.add_widget(self.timer_label)
+        self.main_layout.add_widget(self.info_layout)
 
-        # Main Start Buttons (EASY / HARD)
-        self.mode_frame = BoxLayout(orientation='horizontal', spacing=15, size_hint=(1, 0.12), padding=[20, 0])
-        self.btn_easy = Button(text="EASY", font_size='18sp', bold=True, background_color=(0.2, 0.7, 0.3, 1))
-        self.btn_hard = Button(text="HARD", font_size='18sp', bold=True, background_color=(0.9, 0.3, 0.3, 1))
-        self.btn_easy.bind(on_release=lambda x: self.start_game("EASY"))
-        self.btn_hard.bind(on_release=lambda x: self.start_game("HARD"))
-        self.mode_frame.add_widget(self.btn_easy)
-        self.mode_frame.add_widget(self.btn_hard)
-        self.add_widget(self.mode_frame)
+        # Mode Indicator
+        self.mode_label = Label(
+            text="CHOOSE A MODE",
+            font_size='18sp',
+            bold=True,
+            color=(0.8, 0.8, 0.8, 1),
+            size_hint=(1, 0.06)
+        )
+        self.main_layout.add_widget(self.mode_label)
 
-        # Easy Choice Frame
-        self.easy_choice_frame = BoxLayout(orientation='horizontal', spacing=15, size_hint=(1, 0.12), padding=[20, 0])
-        self.btn_easy_color = Button(text="COLOR", font_size='16sp', bold=True, background_color=(0.2, 0.5, 0.8, 1))
-        self.btn_easy_word = Button(text="WORD", font_size='16sp', bold=True, background_color=(0.8, 0.5, 0.2, 1))
-        self.btn_easy_color.bind(on_release=lambda x: self.select_easy_mode("COLOR"))
-        self.btn_easy_word.bind(on_release=lambda x: self.select_easy_mode("WORD"))
-        self.easy_choice_frame.add_widget(self.btn_easy_color)
-        self.easy_choice_frame.add_widget(self.btn_easy_word)
+        # Game Canvas Area
+        self.circle_widget = CircleWidget(size_hint=(1, 0.45))
+        self.main_layout.add_widget(self.circle_widget)
 
-        # Game Play Layout
-        self.game_frame = BoxLayout(orientation='vertical', spacing=10, size_hint=(1, 0.75))
-        
-        # Circle Display Area
-        self.circle_container = BoxLayout(size_hint=(1, 0.45))
-        self.circle_label = Label(text="", font_size='18sp', bold=True, color=(1, 1, 1, 1), halign='center', valign='middle')
-        self.circle_container.add_widget(self.circle_label)
-        self.circle_container.bind(pos=self.update_circle, size=self.update_circle)
+        # Color Name Overlay inside Ball
+        self.word_label = Label(text="", font_size='24sp', bold=True, color=(1, 1, 1, 1), size_hint=(1, 0.05))
+        self.main_layout.add_widget(self.word_label)
 
-        self.instruction_label = Label(text="", font_size='16sp', bold=True, color=(1, 1, 0.4, 1), size_hint=(1, 0.08))
+        # Buttons Panel (Raised Upwards)
+        self.controls_layout = FloatLayout(size_hint=(1, 0.30))
+        self.main_layout.add_widget(self.controls_layout)
 
-        # Color Buttons Grid
-        self.answer_frame = GridLayout(cols=2, spacing=15, size_hint=(1, 0.42))
-        self.answer_buttons = {}
-        for name in COLOR_NAMES:
-            btn = Button(text=name, font_size='18sp', bold=True, background_normal='', background_color=COLOR_MAP[name])
-            btn.bind(on_release=self.check_answer)
-            self.answer_buttons[name] = btn
-            self.answer_frame.add_widget(btn)
+        self.show_mode_selection()
+        return self.main_layout
 
-        self.game_frame.add_widget(self.circle_container)
-        self.game_frame.add_widget(self.instruction_label)
-        self.game_frame.add_widget(self.answer_frame)
+    def load_best_score(self):
+        try:
+            with open("best_score.txt", "r") as f:
+                return int(f.read())
+        except:
+            return 0
 
-        # Game Over Frame
-        self.game_over_frame = BoxLayout(orientation='vertical', spacing=15, size_hint=(1, 0.6))
-        self.go_title = Label(text="GAME OVER", font_size='28sp', bold=True, color=(1, 0.2, 0.2, 1))
-        self.go_reason = Label(text="", font_size='18sp', bold=True, color=(1, 1, 1, 1))
-        self.go_score = Label(text="", font_size='20sp', bold=True, color=(0.4, 1, 0.4, 1))
-        self.go_best = Label(text="", font_size='18sp', bold=True, color=(1, 0.8, 0.2, 1))
-        self.btn_play_again = Button(text="PLAY AGAIN", font_size='18sp', bold=True, size_hint=(0.7, 0.25), pos_hint={'center_x': 0.5}, background_color=(0.2, 0.7, 1, 1))
-        self.btn_play_again.bind(on_release=self.reset_game)
+    def save_best_score(self):
+        try:
+            with open("best_score.txt", "w") as f:
+                f.write(str(self.best_score))
+        except:
+            pass
 
-        self.game_over_frame.add_widget(self.go_title)
-        self.game_over_frame.add_widget(self.go_reason)
-        self.game_over_frame.add_widget(self.go_score)
-        self.game_over_frame.add_widget(self.go_best)
-        self.game_over_frame.add_widget(self.btn_play_again)
+    def show_mode_selection(self):
+        self.controls_layout.clear_widgets()
+        grid = GridLayout(cols=2, spacing=15, size_hint=(0.8, 0.6), pos_hint={'center_x': 0.5, 'center_y': 0.5})
 
-        self.actual_color = "RED"
+        btn_easy = Button(text="EASY", font_size='20sp', background_color=(0.2, 0.8, 0.4, 1), bold=True)
+        btn_easy.bind(on_release=lambda x: self.choose_easy_mode())
 
-    def update_rect(self, *args):
-        self.bg_rect.pos = self.pos
-        self.bg_rect.size = self.size
+        btn_hard = Button(text="HARD", font_size='20sp', background_color=(0.9, 0.2, 0.3, 1), bold=True)
+        btn_hard.bind(on_release=lambda x: self.start_game("HARD"))
 
-    def set_bg_color(self, color):
-        self.bg_canvas_color.rgba = color
+        grid.add_widget(btn_easy)
+        grid.add_widget(btn_hard)
+        self.controls_layout.add_widget(grid)
 
-    def update_circle(self, *args):
-        self.circle_container.canvas.before.clear()
-        with self.circle_container.canvas.before:
-            Color(*COLOR_MAP[self.actual_color])
-            size = min(self.circle_container.width, self.circle_container.height) * 0.82
-            x = self.circle_container.center_x - size / 2
-            y = self.circle_container.center_y - size / 2
-            Ellipse(pos=(x, y), size=(size, size))
+    def choose_easy_mode(self):
+        self.game_mode = "EASY"
+        self.mode_label.text = "EASY: CHOOSE COLOR OR WORD"
+        self.controls_layout.clear_widgets()
+
+        grid = GridLayout(cols=2, spacing=15, size_hint=(0.8, 0.6), pos_hint={'center_x': 0.5, 'center_y': 0.5})
+
+        btn_color = Button(text="COLOR", font_size='18sp', background_color=(0.2, 0.6, 1.0, 1), bold=True)
+        btn_color.bind(on_release=lambda x: self.select_easy_submode("COLOR"))
+
+        btn_word = Button(text="WORD", font_size='18sp', background_color=(1.0, 0.6, 0.2, 1), bold=True)
+        btn_word.bind(on_release=lambda x: self.select_easy_submode("WORD"))
+
+        grid.add_widget(btn_color)
+        grid.add_widget(btn_word)
+        self.controls_layout.add_widget(grid)
+
+    def select_easy_submode(self, mode):
+        self.easy_mode = mode
+        self.mode_label.text = f"EASY - {mode}"
+        self.start_game("EASY")
 
     def start_game(self, mode):
+        self.game_mode = mode
         self.score = 0
         self.correct_count = 0
-        self.time_left = 5
-        self.game_mode = mode
-
         self.score_label.text = "Score: 0"
-        self.timer_label.text = "Time: 5s"
-
-        self.remove_widget(self.mode_frame)
-        if self.easy_choice_frame in self.children:
-            self.remove_widget(self.easy_choice_frame)
-        if self.game_over_frame in self.children:
-            self.remove_widget(self.game_over_frame)
-
-        if mode == "EASY":
-            self.mode_label.text = "EASY: Choose Target Type"
-            self.add_widget(self.easy_choice_frame)
-        else:
-            self.mode_label.text = "HARD MODE"
-            self.show_game()
-
-    def select_easy_mode(self, mode):
-        self.easy_mode = mode
-        self.remove_widget(self.easy_choice_frame)
-        self.mode_label.text = f"EASY - {mode}"
-        self.show_game()
-
-    def show_game(self):
-        if self.game_frame not in self.children:
-            self.add_widget(self.game_frame)
+        self.setup_game_buttons()
         self.new_round()
 
-    def new_round(self):
+    def setup_game_buttons(self):
+        self.controls_layout.clear_widgets()
+        grid = GridLayout(cols=2, spacing=10, size_hint=(0.9, 0.85), pos_hint={'center_x': 0.5, 'center_y': 0.55})
+
+        self.answer_buttons = {}
+        for name in COLOR_NAMES:
+            btn = Button(
+                text=name,
+                font_size='18sp',
+                bold=True,
+                background_color=COLORS[name]
+            )
+            btn.bind(on_release=lambda instance, n=name: self.check_answer(n))
+            self.answer_buttons[name] = btn
+            grid.add_widget(btn)
+
+        self.controls_layout.add_widget(grid)
+
+    def new_round(self, *args):
         if self.timer_event:
             self.timer_event.cancel()
 
-        for btn in self.answer_buttons.values():
-            btn.disabled = False
-
         self.time_left = max(2, 5 - (self.correct_count // 10))
-        self.timer_label.text = f"Time: {self.time_left}s"
+        self.timer_label.text = f"Time: {self.time_left}"
 
-        self.actual_color = random.choice(COLOR_NAMES)
+        actual_color = random.choice(COLOR_NAMES)
         word_color = random.choice(COLOR_NAMES)
 
-        current_mode = self.easy_mode if self.game_mode == "EASY" else random.choice(["COLOR", "WORD"])
+        if self.game_mode == "EASY":
+            current_mode = self.easy_mode
+        else:
+            current_mode = random.choice(["COLOR", "WORD"])
 
-        self.update_circle()
-        self.circle_label.text = word_color
+        self.circle_widget.set_color(COLORS[actual_color])
+        self.word_label.text = word_color
 
         if current_mode == "COLOR":
-            self.instruction_label.text = "TAP BALL COLOR!"
-            self.correct_answer = self.actual_color
+            self.mode_label.text = "MATCH BALL COLOR!"
+            self.correct_answer = actual_color
         else:
-            self.instruction_label.text = "TAP WORD NAME!"
+            self.mode_label.text = "MATCH WRITTEN WORD!"
             self.correct_answer = word_color
 
-        self.timer_event = Clock.schedule_interval(self.countdown, 1)
+        self.timer_event = Clock.schedule_interval(self.countdown, 1.0)
 
     def countdown(self, dt):
         self.time_left -= 1
-        self.timer_label.text = f"Time: {self.time_left}s"
+        self.timer_label.text = f"Time: {self.time_left}"
 
         if self.time_left <= 0:
             if self.timer_event:
                 self.timer_event.cancel()
-            for btn in self.answer_buttons.values():
-                btn.disabled = True
             self.game_over("TIME'S UP!")
 
-    def check_answer(self, instance):
+    def check_answer(self, answer):
         if self.timer_event:
             self.timer_event.cancel()
 
-        for btn in self.answer_buttons.values():
-            btn.disabled = True
-
-        answer = instance.text
         if answer == self.correct_answer:
             self.correct_count += 1
             self.score += 1 if self.game_mode == "EASY" else 10
@@ -225,69 +224,37 @@ class HueStrikeGame(BoxLayout):
             if self.score > self.best_score:
                 self.best_score = self.score
                 self.best_label.text = f"Best: {self.best_score}"
-                self.store.put('score', best=self.best_score)
+                self.save_best_score()
 
-            Clock.schedule_once(lambda dt: self.new_round(), 0.25)
+            Clock.schedule_once(self.new_round, 0.2)
         else:
-            self.score -= 1 if self.game_mode == "EASY" else 5
-            if self.score < 0:
-                self.score = 0
-            self.score_label.text = f"Score: {self.score}"
             self.game_over("WRONG ANSWER!")
 
     def game_over(self, reason):
         if self.timer_event:
             self.timer_event.cancel()
 
-        if self.game_frame in self.children:
-            self.remove_widget(self.game_frame)
+        self.controls_layout.clear_widgets()
+        layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.8, 0.8), pos_hint={'center_x': 0.5, 'center_y': 0.5})
 
-        self.go_reason.text = reason
-        self.go_score.text = f"Your Score: {self.score}"
-        self.go_best.text = f"Best Score: {self.best_score}"
+        lbl_reason = Label(text=reason, font_size='22sp', bold=True, color=(1, 0.2, 0.2, 1))
+        lbl_score = Label(text=f"Final Score: {self.score}", font_size='18sp')
 
-        if self.game_over_frame not in self.children:
-            self.add_widget(self.game_over_frame)
+        btn_retry = Button(text="PLAY AGAIN", font_size='20sp', bold=True, background_color=(0.2, 0.8, 0.4, 1))
+        btn_retry.bind(on_release=lambda x: self.reset_game())
 
-        self.blink(0)
+        layout.add_widget(lbl_reason)
+        layout.add_widget(lbl_score)
+        layout.add_widget(btn_retry)
 
-    def blink(self, count):
-        if count >= 6:
-            self.set_bg_color(DARK_BG)
-            return
+        self.controls_layout.add_widget(layout)
 
-        if count % 2 == 0:
-            self.set_bg_color((0.8, 0.1, 0.1, 1))
-        else:
-            self.set_bg_color(DARK_BG)
+    def reset_game(self):
+        self.mode_label.text = "CHOOSE A MODE"
+        self.word_label.text = ""
+        self.circle_widget.set_color((0.07, 0.07, 0.09, 1))
+        self.show_mode_selection()
 
-        Clock.schedule_once(lambda dt: self.blink(count + 1), 0.12)
-
-    def reset_game(self, instance):
-        if self.timer_event:
-            self.timer_event.cancel()
-
-        self.score = 0
-        self.correct_count = 0
-        self.time_left = 5
-
-        self.score_label.text = "Score: 0"
-        self.timer_label.text = "Time: 5s"
-
-        if self.game_over_frame in self.children:
-            self.remove_widget(self.game_over_frame)
-        if self.game_frame in self.children:
-            self.remove_widget(self.game_frame)
-
-        self.set_bg_color(DARK_BG)
-        self.mode_label.text = "Select Mode to Start"
-
-        if self.mode_frame not in self.children:
-            self.add_widget(self.mode_frame)
-
-class HueStrikeApp(App):
-    def build(self):
-        return HueStrikeGame()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     HueStrikeApp().run()
+            
