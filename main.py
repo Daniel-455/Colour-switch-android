@@ -12,10 +12,24 @@ from kivy.uix.scrollview import ScrollView
 from kivy.graphics import Color, Ellipse
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.core.audio import SoundLoader
+from kivy.animation import Animation
+from kivy.utils import platform
+
+# Android Haptic Feedback (Vibration) Support
+if platform == 'android':
+    from jnius import autoclass
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    Context = autoclass('android.content.Context')
+    try:
+        vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
+    except:
+        vibrator = None
+else:
+    vibrator = None
 
 Window.clearcolor = (0.07, 0.07, 0.09, 1)
 
-# Circle மற்றும் Buttons இரண்டிற்கும் ஒரே சீரான வண்ணங்கள் (Exact Bright Colors)
 COLORS = {
     "RED": (1.0, 0.2, 0.2, 1),
     "BLUE": (0.1, 0.5, 1.0, 1),
@@ -33,12 +47,10 @@ class CircleWidget(Widget):
     def __init__(self, **kwargs):
         super(CircleWidget, self).__init__(**kwargs)
         self.circle_color = (1, 1, 1, 1)
-        self.text = ""
         self.bind(pos=self.update_canvas, size=self.update_canvas)
 
-    def set_data(self, color_tuple, text_str):
+    def set_data(self, color_tuple):
         self.circle_color = color_tuple
-        self.text = text_str
         self.update_canvas()
 
     def update_canvas(self, *args):
@@ -59,32 +71,46 @@ class HueStrikeApp(App):
         self.game_mode = ""
         self.easy_mode = ""
         self.timer_event = None
+        self.sound_muted = False
+        self.freeze_used = False
+        self.is_frozen = False
+        self.freeze_timer = None
         self.scores_data = self.load_scores()
+
+        # Load Sounds (wav/ogg files)
+        self.snd_click = SoundLoader.load('click.wav')
+        self.snd_correct = SoundLoader.load('correct.wav')
+        self.snd_wrong = SoundLoader.load('wrong.wav')
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
-        # Title
+        # Header Section with Mute Button
+        header = FloatLayout(size_hint=(1, 0.08))
         self.title_label = Label(
-            text="HUE STRIKE",
-            font_size='28sp',
-            bold=True,
-            color=(0.1, 0.9, 0.9, 1),
-            size_hint=(1, 0.08)
+            text="HUE STRIKE", font_size='28sp', bold=True,
+            color=(0.1, 0.9, 0.9, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
-        self.main_layout.add_widget(self.title_label)
+        self.btn_mute = Button(
+            text="🔊", font_size='18sp', size_hint=(None, 1), width=50,
+            pos_hint={'right': 1, 'center_y': 0.5}, background_normal='',
+            background_color=(0.15, 0.15, 0.2, 1)
+        )
+        self.btn_mute.bind(on_release=self.toggle_mute)
+        header.add_widget(self.title_label)
+        header.add_widget(self.btn_mute)
+        self.main_layout.add_widget(header)
 
-        # Top Bar (Score, Best, Time)
+        # Info Layout
         self.info_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.06))
         self.score_label = Label(text="Score: 0", font_size='15sp', color=(1, 1, 1, 1))
         self.best_label = Label(text="Best: 0", font_size='15sp', color=(1, 0.8, 0.2, 1))
         self.timer_label = Label(text="Time: 5", font_size='15sp', color=(1, 0.3, 0.3, 1))
-        
         self.info_layout.add_widget(self.score_label)
         self.info_layout.add_widget(self.best_label)
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Game Canvas
+        # Circle Canvas + Particle & Floating Score Layer
         self.circle_container = FloatLayout(size_hint=(1, 0.38))
         self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(self.circle_widget)
@@ -96,11 +122,8 @@ class HueStrikeApp(App):
         self.circle_container.add_widget(self.word_label)
         self.main_layout.add_widget(self.circle_container)
 
-        # Instruction Below Ball
-        self.mode_label = Label(
-            text="", font_size='20sp', bold=True,
-            color=(1, 0.9, 0.2, 1), size_hint=(1, 0.08)
-        )
+        # Subtitle / Instructions Label
+        self.mode_label = Label(text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), size_hint=(1, 0.08))
         self.main_layout.add_widget(self.mode_label)
 
         # Controls Layout
@@ -110,97 +133,108 @@ class HueStrikeApp(App):
         self.show_main_menu()
         return self.main_layout
 
+    def play_sound(self, sound_obj):
+        if not self.sound_muted and sound_obj:
+            sound_obj.play()
+
+    def vibrate(self, duration=50):
+        if vibrator:
+            try: vibrator.vibrate(duration)
+            except: pass
+
+    def toggle_mute(self, *args):
+        self.sound_muted = not self.sound_muted
+        self.btn_mute.text = "🔇" if self.sound_muted else "🔊"
+
     def load_scores(self):
         try:
             with open("best_scores.json", "r") as f:
                 return json.load(f)
         except:
-            return {"EASY": 0, "HARD": 0}
+            return {"EASY": 0, "HARD": 0, "PRACTICE": 0}
 
     def save_scores(self):
         try:
             with open("best_scores.json", "w") as f:
                 json.dump(self.scores_data, f)
-        except:
-            pass
+        except: pass
 
     def show_main_menu(self):
+        self.play_sound(self.snd_click)
         self.controls_layout.clear_widgets()
         self.mode_label.text = ""
         self.word_label.text = ""
-        self.circle_widget.set_data((0.07, 0.07, 0.09, 1), "")
+        self.circle_widget.set_data((0.07, 0.07, 0.09, 1))
         self.best_label.text = "Best: -"
+        Window.clearcolor = (0.07, 0.07, 0.09, 1)
 
-        layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.9), pos_hint={'center_x': 0.5, 'center_y': 0.5})
+        layout = BoxLayout(orientation='vertical', spacing=8, size_hint=(0.85, 0.95), pos_hint={'center_x': 0.5, 'center_y': 0.5})
 
-        btn_easy = Button(text="EASY MODE", font_size='18sp', bold=True, background_color=(0.2, 0.8, 0.4, 1), background_normal='')
+        btn_easy = Button(text="EASY MODE", font_size='16sp', bold=True, background_color=(0.2, 0.8, 0.4, 1), background_normal='')
         btn_easy.bind(on_release=lambda x: self.choose_easy_mode())
 
-        btn_hard = Button(text="HARD MODE", font_size='18sp', bold=True, background_color=(0.9, 0.2, 0.3, 1), background_normal='')
+        btn_hard = Button(text="HARD MODE", font_size='16sp', bold=True, background_color=(0.9, 0.2, 0.3, 1), background_normal='')
         btn_hard.bind(on_release=lambda x: self.start_game("HARD"))
 
-        btn_instructions = Button(text="GAME INSTRUCTIONS", font_size='16sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
+        btn_practice = Button(text="PRACTICE MODE (NO TIMER)", font_size='14sp', bold=True, background_color=(0.6, 0.3, 0.9, 1), background_normal='')
+        btn_practice.bind(on_release=lambda x: self.start_game("PRACTICE"))
+
+        btn_instructions = Button(text="INSTRUCTIONS", font_size='14sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
         btn_instructions.bind(on_release=lambda x: self.show_instructions_popup())
 
-        btn_best_score = Button(text="BEST SCORE", font_size='16sp', bold=True, background_color=(1.0, 0.6, 0.1, 1), background_normal='')
+        btn_best_score = Button(text="LEADERBOARD", font_size='14sp', bold=True, background_color=(1.0, 0.6, 0.1, 1), background_normal='')
         btn_best_score.bind(on_release=lambda x: self.show_best_score_popup())
 
         layout.add_widget(btn_easy)
         layout.add_widget(btn_hard)
+        layout.add_widget(btn_practice)
         layout.add_widget(btn_instructions)
         layout.add_widget(btn_best_score)
-
         self.controls_layout.add_widget(layout)
 
     def show_instructions_popup(self):
+        self.play_sound(self.snd_click)
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        
         scroll = ScrollView(size_hint=(1, 0.8))
         text = (
             "[b]HUE STRIKE INSTRUCTIONS[/b]\n\n"
-            "1. [color=3388ff]EASY MODE:[/color]\nChoose MATCH COLOR or MATCH WORD.\n\n"
-            "2. [color=ff3333]HARD MODE:[/color]\nCheck instruction below ball:\n"
-            " - 'MATCH BALL COLOR': Tap button matching Ball color.\n"
-            " - 'MATCH WRITTEN WORD': Tap button matching text inside.\n\n"
-            "3. [color=ffcc00]TIME RULES:[/color]\n"
-            " [b]Easy:[/b] 0-10 (5s) -> 11-20 (4s) -> 21-30 (3s) -> 31-40 (2s) -> 40+ (1s)\n"
-            " [b]Hard:[/b] 0-15 (5s) -> 16-30 (4s) -> 31-45 (3s) -> 46-60 (2s) -> 60+ (1s)"
+            "1. [color=3388ff]EASY MODE:[/color]\nSelect MATCH COLOR or MATCH WORD.\n\n"
+            "2. [color=ff3333]HARD MODE:[/color]\nFollow prompt: Ball Color or Written Word.\n\n"
+            "3. [color=aa55ff]PRACTICE MODE:[/color]\nNo timer! Train your instincts.\n\n"
+            "4. [color=00ffff]POWER-UP (❄️):[/color]\nPress 3s Freeze Power once per game to pause timer!"
         )
         lbl = Label(text=text, markup=True, font_size='14sp', size_hint_y=None, halign='left', valign='top')
         lbl.bind(width=lambda instance, value: setattr(instance, 'text_size', (value, None)))
         lbl.bind(texture_size=lambda instance, value: setattr(instance, 'height', value[1]))
-        
         scroll.add_widget(lbl)
         btn = Button(text="CLOSE", size_hint=(1, 0.18), bold=True)
-
         content.add_widget(scroll)
         content.add_widget(btn)
-
         popup = Popup(title="Instructions", content=content, size_hint=(0.9, 0.75))
         btn.bind(on_release=popup.dismiss)
         popup.open()
 
     def show_best_score_popup(self):
+        self.play_sound(self.snd_click)
         content = BoxLayout(orientation='vertical', padding=15, spacing=15)
         text = (
-            f"[size=20sp][b]HIGH SCORES[/b][/size]\n\n"
+            f"[size=20sp][b]HIGH SCORES LEADERBOARD[/b][/size]\n\n"
             f"[color=33ff88]EASY MODE:[/color] {self.scores_data.get('EASY', 0)}\n"
-            f"[color=ff3366]HARD MODE:[/color] {self.scores_data.get('HARD', 0)}"
+            f"[color=ff3366]HARD MODE:[/color] {self.scores_data.get('HARD', 0)}\n"
+            f"[color=aa55ff]PRACTICE MODE:[/color] {self.scores_data.get('PRACTICE', 0)}"
         )
         lbl = Label(text=text, markup=True, font_size='18sp', halign='center')
         btn = Button(text="CLOSE", size_hint=(1, 0.25), bold=True)
-
         content.add_widget(lbl)
         content.add_widget(btn)
-
-        popup = Popup(title="Best Scores", content=content, size_hint=(0.8, 0.45))
+        popup = Popup(title="Leaderboard", content=content, size_hint=(0.8, 0.5))
         btn.bind(on_release=popup.dismiss)
         popup.open()
 
     def choose_easy_mode(self):
+        self.play_sound(self.snd_click)
         self.controls_layout.clear_widgets()
         layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.6), pos_hint={'center_x': 0.5, 'center_y': 0.5})
-
         self.mode_label.text = "EASY: CHOOSE SUB-MODE"
 
         btn_color = Button(text="MATCH COLOR", font_size='18sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
@@ -218,9 +252,12 @@ class HueStrikeApp(App):
         self.start_game("EASY")
 
     def start_game(self, mode):
+        self.play_sound(self.snd_click)
         self.game_mode = mode
         self.score = 0
         self.correct_count = 0
+        self.freeze_used = False
+        self.is_frozen = False
         self.score_label.text = "Score: 0"
         self.best_label.text = f"Best: {self.scores_data.get(mode, 0)}"
         self.setup_game_buttons()
@@ -228,22 +265,40 @@ class HueStrikeApp(App):
 
     def setup_game_buttons(self):
         self.controls_layout.clear_widgets()
-        grid = GridLayout(cols=4, spacing=8, size_hint=(0.98, 0.85), pos_hint={'center_x': 0.5, 'center_y': 0.55})
+        
+        # Power freeze button (if not practice)
+        if self.game_mode != "PRACTICE":
+            self.btn_freeze = Button(
+                text="❄️ FREEZE (3s)", font_size='12sp', bold=True,
+                size_hint=(0.98, 0.15), pos_hint={'center_x': 0.5, 'top': 1.0},
+                background_color=(0.0, 0.7, 0.9, 1), background_normal=''
+            )
+            self.btn_freeze.bind(on_release=self.activate_freeze)
+            self.controls_layout.add_widget(self.btn_freeze)
 
+        grid = GridLayout(cols=4, spacing=6, size_hint=(0.98, 0.8), pos_hint={'center_x': 0.5, 'y': 0.0})
         self.answer_buttons = {}
         for name in COLOR_NAMES:
-            btn = Button(
-                text=name,
-                font_size='11sp',
-                bold=True,
-                background_normal='',  # Default gray image removal for pure exact color
-                background_color=COLORS[name]
-            )
+            btn = Button(text=name, font_size='11sp', bold=True, background_normal='', background_color=COLORS[name])
             btn.bind(on_release=lambda instance, n=name: self.check_answer(n))
             self.answer_buttons[name] = btn
             grid.add_widget(btn)
 
         self.controls_layout.add_widget(grid)
+
+    def activate_freeze(self, *args):
+        if not self.freeze_used and not self.is_frozen:
+            self.play_sound(self.snd_click)
+            self.freeze_used = True
+            self.is_frozen = True
+            self.btn_freeze.disabled = True
+            self.btn_freeze.text = "FROZEN!"
+            self.timer_label.text = f"Time: {self.time_left} (❄️)"
+            Clock.schedule_once(self.unfreeze, 3.0)
+
+    def unfreeze(self, dt):
+        self.is_frozen = False
+        self.timer_label.text = f"Time: {self.time_left}"
 
     def calculate_time(self):
         if self.game_mode == "EASY":
@@ -259,22 +314,38 @@ class HueStrikeApp(App):
             elif self.correct_count <= 60: return 2
             else: return 1
 
+    def update_dynamic_theme(self):
+        # Dynamic theme shifts color intensity as score grows
+        if self.score >= 50:
+            Window.clearcolor = (0.12, 0.05, 0.15, 1) # Neon Purple tint
+        elif self.score >= 20:
+            Window.clearcolor = (0.05, 0.1, 0.15, 1) # Dark Cyan tint
+        else:
+            Window.clearcolor = (0.07, 0.07, 0.09, 1)
+
     def new_round(self, *args):
         if self.timer_event:
             self.timer_event.cancel()
 
-        self.time_left = self.calculate_time()
-        self.timer_label.text = f"Time: {self.time_left}"
+        self.update_dynamic_theme()
+
+        if self.game_mode == "PRACTICE":
+            self.timer_label.text = "Time: ∞"
+        else:
+            self.time_left = self.calculate_time()
+            self.timer_label.text = f"Time: {self.time_left}"
 
         actual_color = random.choice(COLOR_NAMES)
         word_color = random.choice(COLOR_NAMES)
 
         if self.game_mode == "EASY":
             current_mode = self.easy_mode
+        elif self.game_mode == "PRACTICE":
+            current_mode = random.choice(["COLOR", "WORD"])
         else:
             current_mode = random.choice(["COLOR", "WORD"])
 
-        self.circle_widget.set_data(COLORS[actual_color], word_color)
+        self.circle_widget.set_data(COLORS[actual_color])
         self.word_label.text = word_color
 
         if current_mode == "COLOR":
@@ -284,9 +355,13 @@ class HueStrikeApp(App):
             self.mode_label.text = "MATCH WRITTEN WORD!"
             self.correct_answer = word_color
 
-        self.timer_event = Clock.schedule_interval(self.countdown, 1.0)
+        if self.game_mode != "PRACTICE":
+            self.timer_event = Clock.schedule_interval(self.countdown, 1.0)
 
     def countdown(self, dt):
+        if self.is_frozen:
+            return
+
         self.time_left -= 1
         self.timer_label.text = f"Time: {self.time_left}"
 
@@ -295,14 +370,27 @@ class HueStrikeApp(App):
                 self.timer_event.cancel()
             self.trigger_game_over("TIME'S UP!")
 
+    def animate_floating_text(self, text):
+        # Floating score (+10) animation
+        lbl = Label(text=text, font_size='24sp', bold=True, color=(0, 1, 0.5, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
+        self.circle_container.add_widget(lbl)
+        anim = Animation(pos_hint={'center_x': 0.5, 'center_y': 0.8}, opacity=0, duration=0.6)
+        anim.bind(on_complete=lambda a, w: self.circle_container.remove_widget(lbl))
+        anim.start(lbl)
+
     def check_answer(self, answer):
         if self.timer_event:
             self.timer_event.cancel()
 
         if answer == self.correct_answer:
+            self.play_sound(self.snd_correct)
+            self.vibrate(40) # Subtle success vibration
             self.correct_count += 1
-            self.score += 1 if self.game_mode == "EASY" else 10
+            pts = 1 if self.game_mode == "EASY" else 10
+            self.score += pts
             self.score_label.text = f"Score: {self.score}"
+
+            self.animate_floating_text(f"+{pts}")
 
             current_best = self.scores_data.get(self.game_mode, 0)
             if self.score > current_best:
@@ -315,9 +403,12 @@ class HueStrikeApp(App):
             self.trigger_game_over("WRONG ANSWER!")
 
     def trigger_game_over(self, reason):
+        self.play_sound(self.snd_wrong)
+        self.vibrate(200) # Strong failure vibration
+
         # 4 Times Red Screen Blink Animation
         def blink(count):
-            if count >= 8:  # 4 complete blinks (red on/off x 4)
+            if count >= 8:
                 Window.clearcolor = (0.07, 0.07, 0.09, 1)
                 self.game_over(reason)
                 return
@@ -349,7 +440,6 @@ class HueStrikeApp(App):
         layout.add_widget(lbl_score)
         layout.add_widget(btn_retry)
         layout.add_widget(btn_menu)
-
         self.controls_layout.add_widget(layout)
 
 if __name__ == "__main__":
