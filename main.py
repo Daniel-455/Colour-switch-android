@@ -15,15 +15,16 @@ from kivy.core.window import Window
 
 Window.clearcolor = (0.07, 0.07, 0.09, 1)
 
+# Circle மற்றும் Buttons இரண்டிற்கும் ஒரே சீரான வண்ணங்கள் (Exact Bright Colors)
 COLORS = {
-    "RED": (1.0, 0.2, 0.3, 1),
-    "BLUE": (0.2, 0.5, 1.0, 1),
-    "GREEN": (0.2, 0.8, 0.4, 1),
-    "YELLOW": (1.0, 0.8, 0.1, 1),
-    "PURPLE": (0.7, 0.3, 0.9, 1),
-    "ORANGE": (1.0, 0.5, 0.1, 1),
-    "CYAN": (0.1, 0.9, 0.9, 1),
-    "PINK": (1.0, 0.4, 0.7, 1)
+    "RED": (1.0, 0.2, 0.2, 1),
+    "BLUE": (0.1, 0.5, 1.0, 1),
+    "GREEN": (0.1, 0.8, 0.3, 1),
+    "YELLOW": (1.0, 0.85, 0.0, 1),
+    "PURPLE": (0.7, 0.2, 0.9, 1),
+    "ORANGE": (1.0, 0.5, 0.0, 1),
+    "CYAN": (0.0, 0.85, 1.0, 1),
+    "PINK": (1.0, 0.3, 0.7, 1)
 }
 
 COLOR_NAMES = list(COLORS.keys())
@@ -132,16 +133,16 @@ class HueStrikeApp(App):
 
         layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.9), pos_hint={'center_x': 0.5, 'center_y': 0.5})
 
-        btn_easy = Button(text="EASY MODE", font_size='18sp', bold=True, background_color=(0.2, 0.8, 0.4, 1))
+        btn_easy = Button(text="EASY MODE", font_size='18sp', bold=True, background_color=(0.2, 0.8, 0.4, 1), background_normal='')
         btn_easy.bind(on_release=lambda x: self.choose_easy_mode())
 
-        btn_hard = Button(text="HARD MODE", font_size='18sp', bold=True, background_color=(0.9, 0.2, 0.3, 1))
+        btn_hard = Button(text="HARD MODE", font_size='18sp', bold=True, background_color=(0.9, 0.2, 0.3, 1), background_normal='')
         btn_hard.bind(on_release=lambda x: self.start_game("HARD"))
 
-        btn_instructions = Button(text="GAME INSTRUCTIONS", font_size='16sp', bold=True, background_color=(0.2, 0.6, 1.0, 1))
+        btn_instructions = Button(text="GAME INSTRUCTIONS", font_size='16sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
         btn_instructions.bind(on_release=lambda x: self.show_instructions_popup())
 
-        btn_best_score = Button(text="BEST SCORE", font_size='16sp', bold=True, background_color=(1.0, 0.6, 0.1, 1))
+        btn_best_score = Button(text="BEST SCORE", font_size='16sp', bold=True, background_color=(1.0, 0.6, 0.1, 1), background_normal='')
         btn_best_score.bind(on_release=lambda x: self.show_best_score_popup())
 
         layout.add_widget(btn_easy)
@@ -202,10 +203,10 @@ class HueStrikeApp(App):
 
         self.mode_label.text = "EASY: CHOOSE SUB-MODE"
 
-        btn_color = Button(text="MATCH COLOR", font_size='18sp', bold=True, background_color=(0.2, 0.6, 1.0, 1))
+        btn_color = Button(text="MATCH COLOR", font_size='18sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
         btn_color.bind(on_release=lambda x: self.select_easy_submode("COLOR"))
 
-        btn_word = Button(text="MATCH WORD", font_size='18sp', bold=True, background_color=(1.0, 0.6, 0.2, 1))
+        btn_word = Button(text="MATCH WORD", font_size='18sp', bold=True, background_color=(1.0, 0.6, 0.2, 1), background_normal='')
         btn_word.bind(on_release=lambda x: self.select_easy_submode("WORD"))
 
         layout.add_widget(btn_color)
@@ -233,8 +234,9 @@ class HueStrikeApp(App):
         for name in COLOR_NAMES:
             btn = Button(
                 text=name,
-                font_size='12sp',
+                font_size='11sp',
                 bold=True,
+                background_normal='',  # Default gray image removal for pure exact color
                 background_color=COLORS[name]
             )
             btn.bind(on_release=lambda instance, n=name: self.check_answer(n))
@@ -313,14 +315,14 @@ class HueStrikeApp(App):
             self.trigger_game_over("WRONG ANSWER!")
 
     def trigger_game_over(self, reason):
-        # Screen Red Blink Animation (2 times)
+        # 4 Times Red Screen Blink Animation
         def blink(count):
-            if count >= 4:
+            if count >= 8:  # 4 complete blinks (red on/off x 4)
                 Window.clearcolor = (0.07, 0.07, 0.09, 1)
                 self.game_over(reason)
                 return
             if count % 2 == 0:
-                Window.clearcolor = (0.6, 0.05, 0.05, 1)
+                Window.clearcolor = (0.7, 0.05, 0.05, 1)
             else:
                 Window.clearcolor = (0.07, 0.07, 0.09, 1)
             Clock.schedule_once(lambda dt: blink(count + 1), 0.1)
@@ -337,10 +339,10 @@ class HueStrikeApp(App):
         lbl_reason = Label(text=reason, font_size='22sp', bold=True, color=(1, 0.2, 0.2, 1))
         lbl_score = Label(text=f"Score: {self.score}", font_size='18sp')
 
-        btn_retry = Button(text="PLAY AGAIN", font_size='18sp', bold=True, background_color=(0.2, 0.8, 0.4, 1))
+        btn_retry = Button(text="PLAY AGAIN", font_size='18sp', bold=True, background_color=(0.2, 0.8, 0.4, 1), background_normal='')
         btn_retry.bind(on_release=lambda x: self.start_game(self.game_mode))
 
-        btn_menu = Button(text="MAIN MENU", font_size='16sp', bold=True, background_color=(0.2, 0.6, 1.0, 1))
+        btn_menu = Button(text="MAIN MENU", font_size='16sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
         btn_menu.bind(on_release=lambda x: self.show_main_menu())
 
         layout.add_widget(lbl_reason)
