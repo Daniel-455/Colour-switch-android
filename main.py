@@ -8,6 +8,7 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
+from kivy.uix.scrollview import ScrollView
 from kivy.graphics import Color, Ellipse
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -43,7 +44,6 @@ class CircleWidget(Widget):
         self.canvas.clear()
         with self.canvas:
             Color(*self.circle_color)
-            # Reduced circle diameter to fit inside properly
             size = min(self.width, self.height) * 0.65
             x = self.center_x - size / 2
             y = self.center_y - size / 2
@@ -72,20 +72,22 @@ class HueStrikeApp(App):
         )
         self.main_layout.add_widget(self.title_label)
 
-        # Top Bar (Score & Timer)
+        # Top Bar (Score, Best, Time)
         self.info_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.06))
-        self.score_label = Label(text="Score: 0", font_size='18sp', color=(1, 1, 1, 1))
-        self.timer_label = Label(text="Time: 5", font_size='18sp', color=(1, 0.3, 0.3, 1))
+        self.score_label = Label(text="Score: 0", font_size='15sp', color=(1, 1, 1, 1))
+        self.best_label = Label(text="Best: 0", font_size='15sp', color=(1, 0.8, 0.2, 1))
+        self.timer_label = Label(text="Time: 5", font_size='15sp', color=(1, 0.3, 0.3, 1))
+        
         self.info_layout.add_widget(self.score_label)
+        self.info_layout.add_widget(self.best_label)
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Game Canvas (Circle Container)
+        # Game Canvas
         self.circle_container = FloatLayout(size_hint=(1, 0.38))
         self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(self.circle_widget)
         
-        # Word text inside Circle
         self.word_label = Label(
             text="", font_size='32sp', bold=True,
             color=(1, 1, 1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
@@ -100,7 +102,7 @@ class HueStrikeApp(App):
         )
         self.main_layout.add_widget(self.mode_label)
 
-        # Interactive Area (Buttons)
+        # Controls Layout
         self.controls_layout = FloatLayout(size_hint=(1, 0.40))
         self.main_layout.add_widget(self.controls_layout)
 
@@ -126,6 +128,7 @@ class HueStrikeApp(App):
         self.mode_label.text = ""
         self.word_label.text = ""
         self.circle_widget.set_data((0.07, 0.07, 0.09, 1), "")
+        self.best_label.text = "Best: -"
 
         layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.9), pos_hint={'center_x': 0.5, 'center_y': 0.5})
 
@@ -150,21 +153,29 @@ class HueStrikeApp(App):
 
     def show_instructions_popup(self):
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        
+        scroll = ScrollView(size_hint=(1, 0.8))
         text = (
             "[b]HUE STRIKE INSTRUCTIONS[/b]\n\n"
-            "1. [color=3388ff]EASY MODE:[/color] Choose either Color or Word matching.\n"
-            "2. [color=ff3333]HARD MODE:[/color] Check instruction below the ball!\n"
-            "   - 'MATCH BALL COLOR': Tap button with Ball's color.\n"
-            "   - 'MATCH WRITTEN WORD': Tap button matching the text inside.\n\n"
-            "3. Beat the timer before it hits zero!"
+            "1. [color=3388ff]EASY MODE:[/color]\nChoose MATCH COLOR or MATCH WORD.\n\n"
+            "2. [color=ff3333]HARD MODE:[/color]\nCheck instruction below ball:\n"
+            " - 'MATCH BALL COLOR': Tap button matching Ball color.\n"
+            " - 'MATCH WRITTEN WORD': Tap button matching text inside.\n\n"
+            "3. [color=ffcc00]TIME RULES:[/color]\n"
+            " [b]Easy:[/b] 0-10 (5s) -> 11-20 (4s) -> 21-30 (3s) -> 31-40 (2s) -> 40+ (1s)\n"
+            " [b]Hard:[/b] 0-15 (5s) -> 16-30 (4s) -> 31-45 (3s) -> 46-60 (2s) -> 60+ (1s)"
         )
-        lbl = Label(text=text, markup=True, font_size='14sp', halign='center')
-        btn = Button(text="CLOSE", size_hint=(1, 0.2), bold=True)
+        lbl = Label(text=text, markup=True, font_size='14sp', size_hint_y=None, halign='left', valign='top')
+        lbl.bind(width=lambda instance, value: setattr(instance, 'text_size', (value, None)))
+        lbl.bind(texture_size=lambda instance, value: setattr(instance, 'height', value[1]))
+        
+        scroll.add_widget(lbl)
+        btn = Button(text="CLOSE", size_hint=(1, 0.18), bold=True)
 
-        content.add_widget(lbl)
+        content.add_widget(scroll)
         content.add_widget(btn)
 
-        popup = Popup(title="Instructions", content=content, size_hint=(0.9, 0.6))
+        popup = Popup(title="Instructions", content=content, size_hint=(0.9, 0.75))
         btn.bind(on_release=popup.dismiss)
         popup.open()
 
@@ -210,6 +221,7 @@ class HueStrikeApp(App):
         self.score = 0
         self.correct_count = 0
         self.score_label.text = "Score: 0"
+        self.best_label.text = f"Best: {self.scores_data.get(mode, 0)}"
         self.setup_game_buttons()
         self.new_round()
 
@@ -232,14 +244,13 @@ class HueStrikeApp(App):
         self.controls_layout.add_widget(grid)
 
     def calculate_time(self):
-        # Time logic configuration
         if self.game_mode == "EASY":
             if self.correct_count <= 10: return 5
             elif self.correct_count <= 20: return 4
             elif self.correct_count <= 30: return 3
             elif self.correct_count <= 40: return 2
             else: return 1
-        else: # HARD Mode
+        else:
             if self.correct_count <= 15: return 5
             elif self.correct_count <= 30: return 4
             elif self.correct_count <= 45: return 3
@@ -264,7 +275,6 @@ class HueStrikeApp(App):
         self.circle_widget.set_data(COLORS[actual_color], word_color)
         self.word_label.text = word_color
 
-        # Instruction positioned cleanly under color ball
         if current_mode == "COLOR":
             self.mode_label.text = "MATCH BALL COLOR!"
             self.correct_answer = actual_color
@@ -281,7 +291,7 @@ class HueStrikeApp(App):
         if self.time_left <= 0:
             if self.timer_event:
                 self.timer_event.cancel()
-            self.game_over("TIME'S UP!")
+            self.trigger_game_over("TIME'S UP!")
 
     def check_answer(self, answer):
         if self.timer_event:
@@ -292,15 +302,30 @@ class HueStrikeApp(App):
             self.score += 1 if self.game_mode == "EASY" else 10
             self.score_label.text = f"Score: {self.score}"
 
-            # High Score Update Logic
             current_best = self.scores_data.get(self.game_mode, 0)
             if self.score > current_best:
                 self.scores_data[self.game_mode] = self.score
+                self.best_label.text = f"Best: {self.score}"
                 self.save_scores()
 
             Clock.schedule_once(self.new_round, 0.15)
         else:
-            self.game_over("WRONG ANSWER!")
+            self.trigger_game_over("WRONG ANSWER!")
+
+    def trigger_game_over(self, reason):
+        # Screen Red Blink Animation (2 times)
+        def blink(count):
+            if count >= 4:
+                Window.clearcolor = (0.07, 0.07, 0.09, 1)
+                self.game_over(reason)
+                return
+            if count % 2 == 0:
+                Window.clearcolor = (0.6, 0.05, 0.05, 1)
+            else:
+                Window.clearcolor = (0.07, 0.07, 0.09, 1)
+            Clock.schedule_once(lambda dt: blink(count + 1), 0.1)
+
+        blink(0)
 
     def game_over(self, reason):
         if self.timer_event:
