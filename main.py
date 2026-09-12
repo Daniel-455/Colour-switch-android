@@ -134,11 +134,10 @@ class HueStrikeApp(App):
         def play_sound(self, sound_obj):
         if not self.sound_muted and sound_obj:
             try:
-                if sound_obj.state == 'play':
-                    sound_obj.stop()  # ஏற்கனவே ஓடிக்கொண்டிருந்தால் நிறுத்து
+                sound_obj.stop()
                 sound_obj.play()
             except Exception as e:
-                print(f"Sound Error: {e}")
+                print(f"Sound play error: {e}")
         
 
     def vibrate(self, duration=30):
