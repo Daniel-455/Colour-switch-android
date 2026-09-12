@@ -5,7 +5,7 @@ package.domain = org.game
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,wav,mp3,ogg
 version = 1.0.0
-requirements = python3,kivy,android
+requirements = python3,kivy==2.3.0,cython==0.29.33,android
 orientation = portrait
 fullscreen = 0
 icon.filename = %(source.dir)s/icon.png
