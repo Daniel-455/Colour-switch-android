@@ -75,14 +75,10 @@ class HueStrikeApp(App):
         self.is_frozen = False
         self.scores_data = self.load_scores()
 
-        # Load & Preload Sounds to fix click audio latency/delay
+        # Load Sounds Safely
         self.snd_click = SoundLoader.load('click.wav') or SoundLoader.load('click.ogg') or SoundLoader.load('click.mp3')
         self.snd_correct = SoundLoader.load('correct.wav') or SoundLoader.load('correct.ogg') or SoundLoader.load('correct.mp3')
         self.snd_wrong = SoundLoader.load('wrong.wav') or SoundLoader.load('wrong.ogg') or SoundLoader.load('wrong.mp3')
-
-        for sound in [self.snd_click, self.snd_correct, self.snd_wrong]:
-            if sound:
-                sound.load()
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
@@ -112,7 +108,7 @@ class HueStrikeApp(App):
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Circle Canvas + Dynamic Floating Score Container
+        # Circle Canvas + Particle & Floating Score Layer
         self.circle_container = FloatLayout(size_hint=(1, 0.38))
         self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(self.circle_widget)
@@ -124,7 +120,7 @@ class HueStrikeApp(App):
         self.circle_container.add_widget(self.word_label)
         self.main_layout.add_widget(self.circle_container)
 
-        # Instructions / Mode Subtitle Label
+        # Subtitle / Instructions Label
         self.mode_label = Label(text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), size_hint=(1, 0.08))
         self.main_layout.add_widget(self.mode_label)
 
@@ -139,13 +135,11 @@ class HueStrikeApp(App):
         if not self.sound_muted and sound_obj:
             try:
                 sound_obj.stop()
-                if hasattr(sound_obj, 'seek'):
-                    sound_obj.seek(0)
                 sound_obj.play()
             except Exception as e:
                 print(f"Sound play error: {e}")
 
-    def vibrate(self, duration=50):
+    def vibrate(self, duration=30):
         if vibrator:
             try:
                 vibrator.vibrate(duration)
@@ -172,6 +166,7 @@ class HueStrikeApp(App):
 
     def show_main_menu(self):
         self.play_sound(self.snd_click)
+        self.vibrate(20)
         self.controls_layout.clear_widgets()
         self.mode_label.text = ""
         self.word_label.text = ""
@@ -205,6 +200,7 @@ class HueStrikeApp(App):
 
     def show_instructions_popup(self):
         self.play_sound(self.snd_click)
+        self.vibrate(20)
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
         scroll = ScrollView(size_hint=(1, 0.8))
         text = (
@@ -222,11 +218,12 @@ class HueStrikeApp(App):
         content.add_widget(scroll)
         content.add_widget(btn)
         popup = Popup(title="Instructions", content=content, size_hint=(0.9, 0.75))
-        btn.bind(on_release=popup.dismiss)
+        btn.bind(on_release=lambda x: (self.play_sound(self.snd_click), self.vibrate(20), popup.dismiss()))
         popup.open()
 
     def show_best_score_popup(self):
         self.play_sound(self.snd_click)
+        self.vibrate(20)
         content = BoxLayout(orientation='vertical', padding=15, spacing=15)
         text = (
             f"[size=20sp][b]HIGH SCORES LEADERBOARD[/b][/size]\n\n"
@@ -239,11 +236,12 @@ class HueStrikeApp(App):
         content.add_widget(lbl)
         content.add_widget(btn)
         popup = Popup(title="Leaderboard", content=content, size_hint=(0.8, 0.5))
-        btn.bind(on_release=popup.dismiss)
+        btn.bind(on_release=lambda x: (self.play_sound(self.snd_click), self.vibrate(20), popup.dismiss()))
         popup.open()
 
     def choose_easy_mode(self):
         self.play_sound(self.snd_click)
+        self.vibrate(20)
         self.controls_layout.clear_widgets()
         layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.6), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.mode_label.text = "EASY: CHOOSE SUB-MODE"
@@ -264,6 +262,7 @@ class HueStrikeApp(App):
 
     def start_game(self, mode):
         self.play_sound(self.snd_click)
+        self.vibrate(20)
         self.game_mode = mode
         self.score = 0
         self.correct_count = 0
@@ -299,6 +298,7 @@ class HueStrikeApp(App):
     def activate_freeze(self, *args):
         if not self.freeze_used and not self.is_frozen:
             self.play_sound(self.snd_click)
+            self.vibrate(30)
             self.freeze_used = True
             self.is_frozen = True
             self.btn_freeze.disabled = True
@@ -387,13 +387,12 @@ class HueStrikeApp(App):
         anim.start(lbl)
 
     def check_answer(self, answer):
-        self.play_sound(self.snd_click)
         if self.timer_event:
             self.timer_event.cancel()
 
         if answer == self.correct_answer:
             self.play_sound(self.snd_correct)
-            self.vibrate(40)
+            self.vibrate(60) # Correct vibration
             self.correct_count += 1
             pts = 1 if self.game_mode == "EASY" else 10
             self.score += pts
@@ -413,7 +412,7 @@ class HueStrikeApp(App):
 
     def trigger_game_over(self, reason):
         self.play_sound(self.snd_wrong)
-        self.vibrate(200)
+        self.vibrate(250) # Wrong answer long vibration
 
         def blink(count):
             if count >= 8:
@@ -452,4 +451,3 @@ class HueStrikeApp(App):
 
 if __name__ == "__main__":
     HueStrikeApp().run()
-                
