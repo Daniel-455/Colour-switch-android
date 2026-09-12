@@ -17,16 +17,15 @@ from kivy.animation import Animation
 from kivy.utils import platform
 
 # Android Haptic Feedback (Vibration) Support
+vibrator = None
 if platform == 'android':
-    from jnius import autoclass
-    PythonActivity = autoclass('org.kivy.android.PythonActivity')
-    Context = autoclass('android.content.Context')
     try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        Context = autoclass('android.content.Context')
         vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
-    except:
-        vibrator = None
-else:
-    vibrator = None
+    except Exception as e:
+        print(f"Vibration initialization failed: {e}")
 
 Window.clearcolor = (0.07, 0.07, 0.09, 1)
 
@@ -74,13 +73,12 @@ class HueStrikeApp(App):
         self.sound_muted = False
         self.freeze_used = False
         self.is_frozen = False
-        self.freeze_timer = None
         self.scores_data = self.load_scores()
 
-        # Load Sounds (wav/ogg files)
-        self.snd_click = SoundLoader.load('click.wav')
-        self.snd_correct = SoundLoader.load('correct.wav')
-        self.snd_wrong = SoundLoader.load('wrong.wav')
+        # Load Sounds Safely (mp3 / ogg / wav)
+        self.snd_click = SoundLoader.load('click.mp3') or SoundLoader.load('click.wav') or SoundLoader.load('click.ogg')
+        self.snd_correct = SoundLoader.load('correct.mp3') or SoundLoader.load('correct.wav') or SoundLoader.load('correct.ogg')
+        self.snd_wrong = SoundLoader.load('wrong.mp3') or SoundLoader.load('wrong.wav') or SoundLoader.load('wrong.ogg')
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
@@ -135,12 +133,18 @@ class HueStrikeApp(App):
 
     def play_sound(self, sound_obj):
         if not self.sound_muted and sound_obj:
-            sound_obj.play()
+            try:
+                sound_obj.stop()
+                sound_obj.play()
+            except Exception as e:
+                print(f"Sound play error: {e}")
 
     def vibrate(self, duration=50):
         if vibrator:
-            try: vibrator.vibrate(duration)
-            except: pass
+            try:
+                vibrator.vibrate(duration)
+            except Exception as e:
+                print(f"Vibrate error: {e}")
 
     def toggle_mute(self, *args):
         self.sound_muted = not self.sound_muted
@@ -157,7 +161,8 @@ class HueStrikeApp(App):
         try:
             with open("best_scores.json", "w") as f:
                 json.dump(self.scores_data, f)
-        except: pass
+        except:
+            pass
 
     def show_main_menu(self):
         self.play_sound(self.snd_click)
@@ -266,7 +271,6 @@ class HueStrikeApp(App):
     def setup_game_buttons(self):
         self.controls_layout.clear_widgets()
         
-        # Power freeze button (if not practice)
         if self.game_mode != "PRACTICE":
             self.btn_freeze = Button(
                 text="❄️ FREEZE (3s)", font_size='12sp', bold=True,
@@ -315,11 +319,10 @@ class HueStrikeApp(App):
             else: return 1
 
     def update_dynamic_theme(self):
-        # Dynamic theme shifts color intensity as score grows
         if self.score >= 50:
-            Window.clearcolor = (0.12, 0.05, 0.15, 1) # Neon Purple tint
+            Window.clearcolor = (0.12, 0.05, 0.15, 1)
         elif self.score >= 20:
-            Window.clearcolor = (0.05, 0.1, 0.15, 1) # Dark Cyan tint
+            Window.clearcolor = (0.05, 0.1, 0.15, 1)
         else:
             Window.clearcolor = (0.07, 0.07, 0.09, 1)
 
@@ -371,7 +374,6 @@ class HueStrikeApp(App):
             self.trigger_game_over("TIME'S UP!")
 
     def animate_floating_text(self, text):
-        # Floating score (+10) animation
         lbl = Label(text=text, font_size='24sp', bold=True, color=(0, 1, 0.5, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(lbl)
         anim = Animation(pos_hint={'center_x': 0.5, 'center_y': 0.8}, opacity=0, duration=0.6)
@@ -384,7 +386,7 @@ class HueStrikeApp(App):
 
         if answer == self.correct_answer:
             self.play_sound(self.snd_correct)
-            self.vibrate(40) # Subtle success vibration
+            self.vibrate(40)
             self.correct_count += 1
             pts = 1 if self.game_mode == "EASY" else 10
             self.score += pts
@@ -404,9 +406,8 @@ class HueStrikeApp(App):
 
     def trigger_game_over(self, reason):
         self.play_sound(self.snd_wrong)
-        self.vibrate(200) # Strong failure vibration
+        self.vibrate(200)
 
-        # 4 Times Red Screen Blink Animation
         def blink(count):
             if count >= 8:
                 Window.clearcolor = (0.07, 0.07, 0.09, 1)
@@ -444,4 +445,4 @@ class HueStrikeApp(App):
 
 if __name__ == "__main__":
     HueStrikeApp().run()
-        
+    
