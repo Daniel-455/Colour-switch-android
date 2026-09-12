@@ -75,10 +75,14 @@ class HueStrikeApp(App):
         self.is_frozen = False
         self.scores_data = self.load_scores()
 
-        # Load Sounds Safely (mp3 / ogg / wav)
-        self.snd_click = SoundLoader.load('click.mp3') or SoundLoader.load('click.wav') or SoundLoader.load('click.ogg')
-        self.snd_correct = SoundLoader.load('correct.mp3') or SoundLoader.load('correct.wav') or SoundLoader.load('correct.ogg')
-        self.snd_wrong = SoundLoader.load('wrong.mp3') or SoundLoader.load('wrong.wav') or SoundLoader.load('wrong.ogg')
+        # Load & Preload Sounds to fix click audio latency/delay
+        self.snd_click = SoundLoader.load('click.wav') or SoundLoader.load('click.ogg') or SoundLoader.load('click.mp3')
+        self.snd_correct = SoundLoader.load('correct.wav') or SoundLoader.load('correct.ogg') or SoundLoader.load('correct.mp3')
+        self.snd_wrong = SoundLoader.load('wrong.wav') or SoundLoader.load('wrong.ogg') or SoundLoader.load('wrong.mp3')
+
+        for sound in [self.snd_click, self.snd_correct, self.snd_wrong]:
+            if sound:
+                sound.load()
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
@@ -108,7 +112,7 @@ class HueStrikeApp(App):
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Circle Canvas + Particle & Floating Score Layer
+        # Circle Canvas + Dynamic Floating Score Container
         self.circle_container = FloatLayout(size_hint=(1, 0.38))
         self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(self.circle_widget)
@@ -120,7 +124,7 @@ class HueStrikeApp(App):
         self.circle_container.add_widget(self.word_label)
         self.main_layout.add_widget(self.circle_container)
 
-        # Subtitle / Instructions Label
+        # Instructions / Mode Subtitle Label
         self.mode_label = Label(text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), size_hint=(1, 0.08))
         self.main_layout.add_widget(self.mode_label)
 
@@ -135,6 +139,8 @@ class HueStrikeApp(App):
         if not self.sound_muted and sound_obj:
             try:
                 sound_obj.stop()
+                if hasattr(sound_obj, 'seek'):
+                    sound_obj.seek(0)
                 sound_obj.play()
             except Exception as e:
                 print(f"Sound play error: {e}")
@@ -381,6 +387,7 @@ class HueStrikeApp(App):
         anim.start(lbl)
 
     def check_answer(self, answer):
+        self.play_sound(self.snd_click)
         if self.timer_event:
             self.timer_event.cancel()
 
@@ -445,4 +452,4 @@ class HueStrikeApp(App):
 
 if __name__ == "__main__":
     HueStrikeApp().run()
-    
+                
