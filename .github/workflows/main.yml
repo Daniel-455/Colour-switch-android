@@ -28,8 +28,9 @@ jobs:
         python -m pip install --upgrade pip setuptools wheel
         pip install "cython<3.0.0" buildozer
 
-    - name: Build APK
+    - name: Clean Cache and Build APK
       run: |
+        rm -rf .buildozer
         buildozer android debug
 
     - name: Upload APK Artifact
