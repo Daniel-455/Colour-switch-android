@@ -21,16 +21,17 @@ jobs:
     - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libffi-dev libssl-dev python3-venv
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libffi-dev libssl-dev
 
-    - name: Clean Old Build Cache & Build APK
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install "cython<3.0.0" buildozer
+
+    - name: Clean Cache and Build APK
       run: |
         rm -rf .buildozer
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip setuptools wheel
-        pip install "cython<3.0.0" buildozer
-        buildozer android debug
+        buildozer --clear-cache android debug
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
