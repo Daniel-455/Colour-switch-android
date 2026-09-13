@@ -75,10 +75,13 @@ class HueStrikeApp(App):
         self.is_frozen = False
         self.scores_data = self.load_scores()
 
-        # Load Sounds Safely
-        self.snd_click = SoundLoader.load('click.wav') or SoundLoader.load('click.ogg') or SoundLoader.load('click.mp3')
-        self.snd_correct = SoundLoader.load('correct.wav') or SoundLoader.load('correct.ogg') or SoundLoader.load('correct.mp3')
-        self.snd_wrong = SoundLoader.load('wrong.wav') or SoundLoader.load('wrong.ogg') or SoundLoader.load('wrong.mp3')
+        # MP3 Sound Files Loading
+        try:
+            self.snd_click = SoundLoader.load('click.mp3')
+            self.snd_correct = SoundLoader.load('correct.mp3')
+            self.snd_wrong = SoundLoader.load('wrong.mp3')
+        except Exception as e:
+            print(f"Error loading sound files: {e}")
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
@@ -132,9 +135,12 @@ class HueStrikeApp(App):
         return self.main_layout
 
     def play_sound(self, sound_obj):
+        # Sound Muted Setting Check
         if not self.sound_muted and sound_obj:
             try:
-                sound_obj.stop()
+                if sound_obj.state == 'play':
+                    sound_obj.stop()
+                sound_obj.volume = 1.0
                 sound_obj.play()
             except Exception as e:
                 print(f"Sound play error: {e}")
@@ -147,6 +153,7 @@ class HueStrikeApp(App):
                 print(f"Vibrate error: {e}")
 
     def toggle_mute(self, *args):
+        # Sound Setting Control (ON / OFF)
         self.sound_muted = not self.sound_muted
         self.btn_mute.text = "🔇" if self.sound_muted else "🔊"
 
