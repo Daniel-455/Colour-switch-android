@@ -20,7 +20,7 @@ version = 1.0.0
 
 # (list) Application requirements
 # python3==3.10.12 என குறிப்பிடப்பட்டுள்ளதால் Python 3.14 பிழை வராது
-requirements = python3==3.10.12,kivy,android
+requirements = python3,kivy,android
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait
