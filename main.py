@@ -131,14 +131,13 @@ class HueStrikeApp(App):
         self.show_main_menu()
         return self.main_layout
 
-        def play_sound(self, sound_obj):
+    def play_sound(self, sound_obj):
         if not self.sound_muted and sound_obj:
             try:
                 sound_obj.stop()
                 sound_obj.play()
             except Exception as e:
                 print(f"Sound play error: {e}")
-        
 
     def vibrate(self, duration=30):
         if vibrator:
@@ -393,7 +392,7 @@ class HueStrikeApp(App):
 
         if answer == self.correct_answer:
             self.play_sound(self.snd_correct)
-            self.vibrate(60) # Correct vibration
+            self.vibrate(60)
             self.correct_count += 1
             pts = 1 if self.game_mode == "EASY" else 10
             self.score += pts
@@ -413,7 +412,7 @@ class HueStrikeApp(App):
 
     def trigger_game_over(self, reason):
         self.play_sound(self.snd_wrong)
-        self.vibrate(250) # Wrong answer long vibration
+        self.vibrate(250)
 
         def blink(count):
             if count >= 8:
@@ -452,3 +451,4 @@ class HueStrikeApp(App):
 
 if __name__ == "__main__":
     HueStrikeApp().run()
+        
