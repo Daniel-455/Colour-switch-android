@@ -16,7 +16,6 @@ from kivy.core.audio import SoundLoader
 from kivy.animation import Animation
 from kivy.utils import platform
 
-# Android Haptic Feedback (Vibration) Support
 vibrator = None
 if platform == 'android':
     try:
@@ -75,7 +74,6 @@ class HueStrikeApp(App):
         self.is_frozen = False
         self.scores_data = self.load_scores()
 
-        # Audio Load
         try:
             self.snd_click = SoundLoader.load('click.mp3')
             self.snd_correct = SoundLoader.load('correct.mp3')
@@ -85,26 +83,24 @@ class HueStrikeApp(App):
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
-        # Header Section with Back Button & Mute Button
         header = FloatLayout(size_hint=(1, 0.08))
         
-        # BACK BUTTON
         self.btn_back = Button(
-            text="◀ BACK", font_size='12sp', bold=True, size_hint=(None, 1), width=75,
-            pos_hint={'left': 0, 'center_y': 0.5}, background_normal='',
+            text="◀ BACK", font_size='11sp', bold=True, size_hint=(None, 1), width=75,
+            pos_hint={'x': 0.03, 'center_y': 0.5}, background_normal='',
             background_color=(0.25, 0.25, 0.35, 1), opacity=0, disabled=True
         )
         self.btn_back.bind(on_release=self.go_back_to_menu)
 
         self.title_label = Label(
-            text="HUE STRIKE", font_size='26sp', bold=True,
+            text="HUE STRIKE", font_size='22sp', bold=True,
             color=(0.1, 0.9, 0.9, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
         
         self.btn_mute = Button(
-            text="🔊", font_size='18sp', size_hint=(None, 1), width=50,
-            pos_hint={'right': 1, 'center_y': 0.5}, background_normal='',
-            background_color=(0.15, 0.15, 0.2, 1)
+            text="SOUND", font_size='11sp', bold=True, size_hint=(None, 1), width=65,
+            pos_hint={'right': 0.97, 'center_y': 0.5}, background_normal='',
+            background_color=(0.15, 0.5, 0.2, 1)
         )
         self.btn_mute.bind(on_release=self.toggle_mute)
 
@@ -113,7 +109,6 @@ class HueStrikeApp(App):
         header.add_widget(self.btn_mute)
         self.main_layout.add_widget(header)
 
-        # Info Layout
         self.info_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.06))
         self.score_label = Label(text="Score: 0", font_size='15sp', color=(1, 1, 1, 1))
         self.best_label = Label(text="Best: 0", font_size='15sp', color=(1, 0.8, 0.2, 1))
@@ -123,7 +118,6 @@ class HueStrikeApp(App):
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Circle Canvas
         self.circle_container = FloatLayout(size_hint=(1, 0.38))
         self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(self.circle_widget)
@@ -135,11 +129,9 @@ class HueStrikeApp(App):
         self.circle_container.add_widget(self.word_label)
         self.main_layout.add_widget(self.circle_container)
 
-        # Subtitle
         self.mode_label = Label(text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), size_hint=(1, 0.08))
         self.main_layout.add_widget(self.mode_label)
 
-        # Controls Layout
         self.controls_layout = FloatLayout(size_hint=(1, 0.40))
         self.main_layout.add_widget(self.controls_layout)
 
@@ -170,7 +162,12 @@ class HueStrikeApp(App):
 
     def toggle_mute(self, *args):
         self.sound_muted = not self.sound_muted
-        self.btn_mute.text = "🔇" if self.sound_muted else "🔊"
+        if self.sound_muted:
+            self.btn_mute.text = "MUTED"
+            self.btn_mute.background_color = (0.6, 0.2, 0.2, 1)
+        else:
+            self.btn_mute.text = "SOUND"
+            self.btn_mute.background_color = (0.15, 0.5, 0.2, 1)
 
     def load_scores(self):
         try:
