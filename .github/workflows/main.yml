@@ -10,27 +10,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev libssl-dev openssl libgdbm-dev libgdbm-compat-dev liblzma-dev libreadline-dev libffi-dev libgl1-mesa-dev libgles2-mesa-dev ccache libffi-dev libltdl-dev zlib1g-dev openjdk-17-jdk unzip autoconf libtool pkg-config git
-        pip install --upgrade pip
-        pip install --upgrade buildozer cython==0.29.33
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev libssl-dev openssl libgdbm-dev libffi-dev zlib1g-dev openjdk-17-jdk zip unzip
+          pip install --upgrade pip
+          pip install --upgrade buildozer cython==0.29.33
 
-    - name: Build APK with Buildozer
-      run: |
-        yes | buildozer android debug
+      - name: Build APK with Buildozer
+        run: |
+          yes | buildozer android debug
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: package
-        path: bin/*.apk
-        
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: bin/*.apk
+          
