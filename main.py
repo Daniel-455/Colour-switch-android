@@ -75,7 +75,7 @@ class HueStrikeApp(App):
         self.is_frozen = False
         self.scores_data = self.load_scores()
 
-        # MP3 Sound Files Loading
+        # Audio Load
         try:
             self.snd_click = SoundLoader.load('click.mp3')
             self.snd_correct = SoundLoader.load('correct.mp3')
@@ -85,18 +85,30 @@ class HueStrikeApp(App):
 
         self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
 
-        # Header Section with Mute Button
+        # Header Section with Back Button & Mute Button
         header = FloatLayout(size_hint=(1, 0.08))
+        
+        # BACK BUTTON
+        self.btn_back = Button(
+            text="◀ BACK", font_size='12sp', bold=True, size_hint=(None, 1), width=75,
+            pos_hint={'left': 0, 'center_y': 0.5}, background_normal='',
+            background_color=(0.25, 0.25, 0.35, 1), opacity=0, disabled=True
+        )
+        self.btn_back.bind(on_release=self.go_back_to_menu)
+
         self.title_label = Label(
-            text="HUE STRIKE", font_size='28sp', bold=True,
+            text="HUE STRIKE", font_size='26sp', bold=True,
             color=(0.1, 0.9, 0.9, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
+        
         self.btn_mute = Button(
             text="🔊", font_size='18sp', size_hint=(None, 1), width=50,
             pos_hint={'right': 1, 'center_y': 0.5}, background_normal='',
             background_color=(0.15, 0.15, 0.2, 1)
         )
         self.btn_mute.bind(on_release=self.toggle_mute)
+
+        header.add_widget(self.btn_back)
         header.add_widget(self.title_label)
         header.add_widget(self.btn_mute)
         self.main_layout.add_widget(header)
@@ -111,7 +123,7 @@ class HueStrikeApp(App):
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Circle Canvas + Particle & Floating Score Layer
+        # Circle Canvas
         self.circle_container = FloatLayout(size_hint=(1, 0.38))
         self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.circle_container.add_widget(self.circle_widget)
@@ -123,7 +135,7 @@ class HueStrikeApp(App):
         self.circle_container.add_widget(self.word_label)
         self.main_layout.add_widget(self.circle_container)
 
-        # Subtitle / Instructions Label
+        # Subtitle
         self.mode_label = Label(text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), size_hint=(1, 0.08))
         self.main_layout.add_widget(self.mode_label)
 
@@ -134,8 +146,12 @@ class HueStrikeApp(App):
         self.show_main_menu()
         return self.main_layout
 
+    def go_back_to_menu(self, *args):
+        if self.timer_event:
+            self.timer_event.cancel()
+        self.show_main_menu()
+
     def play_sound(self, sound_obj):
-        # Sound Muted Setting Check
         if not self.sound_muted and sound_obj:
             try:
                 if sound_obj.state == 'play':
@@ -153,7 +169,6 @@ class HueStrikeApp(App):
                 print(f"Vibrate error: {e}")
 
     def toggle_mute(self, *args):
-        # Sound Setting Control (ON / OFF)
         self.sound_muted = not self.sound_muted
         self.btn_mute.text = "🔇" if self.sound_muted else "🔊"
 
@@ -174,6 +189,9 @@ class HueStrikeApp(App):
     def show_main_menu(self):
         self.play_sound(self.snd_click)
         self.vibrate(20)
+        self.btn_back.opacity = 0
+        self.btn_back.disabled = True
+
         self.controls_layout.clear_widgets()
         self.mode_label.text = ""
         self.word_label.text = ""
@@ -215,7 +233,7 @@ class HueStrikeApp(App):
             "1. [color=3388ff]EASY MODE:[/color]\nSelect MATCH COLOR or MATCH WORD.\n\n"
             "2. [color=ff3333]HARD MODE:[/color]\nFollow prompt: Ball Color or Written Word.\n\n"
             "3. [color=aa55ff]PRACTICE MODE:[/color]\nNo timer! Train your instincts.\n\n"
-            "4. [color=00ffff]POWER-UP (❄️):[/color]\nPress 3s Freeze Power once per game to pause timer!"
+            "4. [color=00ffff]POWER-UP [FREEZE]:[/color]\nPress FREEZE button once per game to pause timer for 3s!"
         )
         lbl = Label(text=text, markup=True, font_size='14sp', size_hint_y=None, halign='left', valign='top')
         lbl.bind(width=lambda instance, value: setattr(instance, 'text_size', (value, None)))
@@ -249,6 +267,8 @@ class HueStrikeApp(App):
     def choose_easy_mode(self):
         self.play_sound(self.snd_click)
         self.vibrate(20)
+        self.btn_back.opacity = 1
+        self.btn_back.disabled = False
         self.controls_layout.clear_widgets()
         layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.6), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         self.mode_label.text = "EASY: CHOOSE SUB-MODE"
@@ -270,6 +290,9 @@ class HueStrikeApp(App):
     def start_game(self, mode):
         self.play_sound(self.snd_click)
         self.vibrate(20)
+        self.btn_back.opacity = 1
+        self.btn_back.disabled = False
+
         self.game_mode = mode
         self.score = 0
         self.correct_count = 0
@@ -285,7 +308,7 @@ class HueStrikeApp(App):
         
         if self.game_mode != "PRACTICE":
             self.btn_freeze = Button(
-                text="❄️ FREEZE (3s)", font_size='12sp', bold=True,
+                text="FREEZE (3s)", font_size='13sp', bold=True,
                 size_hint=(0.98, 0.15), pos_hint={'center_x': 0.5, 'top': 1.0},
                 background_color=(0.0, 0.7, 0.9, 1), background_normal=''
             )
@@ -310,7 +333,7 @@ class HueStrikeApp(App):
             self.is_frozen = True
             self.btn_freeze.disabled = True
             self.btn_freeze.text = "FROZEN!"
-            self.timer_label.text = f"Time: {self.time_left} (❄️)"
+            self.timer_label.text = f"Time: {self.time_left} [FROZEN]"
             Clock.schedule_once(self.unfreeze, 3.0)
 
     def unfreeze(self, dt):
