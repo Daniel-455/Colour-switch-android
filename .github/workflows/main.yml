@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # <--- இங்குதான் மாற்றம் செய்துள்ளோம் (24.04 to 22.04)
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout Code
@@ -19,6 +19,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      # Ithu thaan nama pudhusa add panna Java step
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
       - name: Install System & Build Dependencies
         run: |
@@ -38,7 +45,6 @@ jobs:
             zip \
             unzip \
             zlib1g-dev \
-            openjdk-17-jdk \
             ffmpeg \
             libsdl2-dev \
             libsdl2-image-dev \
