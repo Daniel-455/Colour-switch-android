@@ -1,5 +1,5 @@
 [app]
-
+accept_sdk_license = True
 title = Hue Strike
 package.name = huestrike
 package.domain = org.test
