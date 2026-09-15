@@ -3,36 +3,60 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install System & Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev \
-            libssl-dev openssl libgdbm-dev libffi-dev zlib1g-dev openjdk-17-jdk zip unzip \
-            autoconf automake libtool pkg-config cmake ninja-build libltdl-dev
-          pip install --upgrade pip setuptools
-          pip install --upgrade buildozer cython==0.29.33
+          sudo apt-get install -y \
+            build-essential \
+            ccache \
+            git \
+            libncurses5:i386 \
+            zip \
+            unzip \
+            zlib1g-dev \
+            openjdk-17-jdk \
+            ffmpeg \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixin-dev \
+            libsdl2-ttf-dev \
+            libportmidi-dev \
+            libswscale-dev \
+            libavformat-dev \
+            libavcodec-dev
+          pip install --upgrade pip setuptools buildozer cython==0.29.33
 
-      - name: Build APK with Buildozer
+      - name: Accept Android SDK Licenses
         run: |
-          buildozer android debug
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Build Debug APK with Buildozer
+        env:
+          APP_ACCEPT_SDK_LICENSE: 1
+        run: buildozer android debug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: package
+          name: package-debug-apk
           path: bin/*.apk
           
