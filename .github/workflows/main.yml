@@ -27,6 +27,12 @@ jobs:
             build-essential \
             ccache \
             git \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            cmake \
+            libffi-dev \
             libncurses6 \
             zip \
             unzip \
