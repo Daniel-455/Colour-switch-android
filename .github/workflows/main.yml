@@ -33,6 +33,7 @@ jobs:
             pkg-config \
             cmake \
             libffi-dev \
+            libssl-dev \
             libncurses6 \
             zip \
             unzip \
