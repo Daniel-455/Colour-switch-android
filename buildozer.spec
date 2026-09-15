@@ -18,7 +18,7 @@ android.ndk_api = 21
 android.accept_sdk_license = True
 android.allow_backup = True
 android.clean_on_build = True
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 
 [buildozer]
 
