@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04  # <--- இங்குதான் மாற்றம் செய்துள்ளோம் (24.04 to 22.04)
 
     steps:
       - name: Checkout Code
@@ -34,7 +34,7 @@ jobs:
             cmake \
             libffi-dev \
             libssl-dev \
-            libncurses6 \
+            libncurses5 \
             zip \
             unzip \
             zlib1g-dev \
