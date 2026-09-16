@@ -85,8 +85,9 @@ class HueStrikeApp(App):
 
         header = FloatLayout(size_hint=(1, 0.08))
         
+        # Modified BACK button (Removed symbol, updated size and font)
         self.btn_back = Button(
-            text="◀ BACK", font_size='11sp', bold=True, size_hint=(None, 1), width=75,
+            text="BACK", font_size='14sp', bold=True, size_hint=(None, 0.6), width=75,
             pos_hint={'x': 0.03, 'center_y': 0.5}, background_normal='',
             background_color=(0.25, 0.25, 0.35, 1), opacity=0, disabled=True
         )
@@ -97,8 +98,9 @@ class HueStrikeApp(App):
             color=(0.1, 0.9, 0.9, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
         
+        # Modified SOUND button (Updated size and font)
         self.btn_mute = Button(
-            text="SOUND", font_size='11sp', bold=True, size_hint=(None, 1), width=65,
+            text="SOUND", font_size='14sp', bold=True, size_hint=(None, 0.6), width=75,
             pos_hint={'right': 0.97, 'center_y': 0.5}, background_normal='',
             background_color=(0.15, 0.5, 0.2, 1)
         )
@@ -478,4 +480,4 @@ class HueStrikeApp(App):
 
 if __name__ == "__main__":
     HueStrikeApp().run()
-        
+    
