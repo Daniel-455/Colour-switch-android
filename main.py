@@ -85,9 +85,9 @@ class HueStrikeApp(App):
 
         header = FloatLayout(size_hint=(1, 0.08))
         
-        # Width increased to 100 and height slightly adjusted for a perfect rectangle shape
+        # Changed to size_hint=(0.22, 0.65) for perfect horizontal rectangle
         self.btn_back = Button(
-            text="BACK", font_size='14sp', bold=True, size_hint=(None, 0.55), width=100,
+            text="BACK", font_size='14sp', bold=True, size_hint=(0.22, 0.65),
             pos_hint={'x': 0.03, 'center_y': 0.5}, background_normal='',
             background_color=(0.25, 0.25, 0.35, 1), opacity=0, disabled=True
         )
@@ -98,9 +98,9 @@ class HueStrikeApp(App):
             color=(0.1, 0.9, 0.9, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
         
-        # Width increased to 100 for a perfect rectangle shape
+        # Changed to size_hint=(0.22, 0.65) for perfect horizontal rectangle
         self.btn_mute = Button(
-            text="SOUND", font_size='14sp', bold=True, size_hint=(None, 0.55), width=100,
+            text="SOUND", font_size='14sp', bold=True, size_hint=(0.22, 0.65),
             pos_hint={'right': 0.97, 'center_y': 0.5}, background_normal='',
             background_color=(0.15, 0.5, 0.2, 1)
         )
