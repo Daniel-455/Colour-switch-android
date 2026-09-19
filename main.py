@@ -55,7 +55,6 @@ class CircleWidget(Widget):
         self.canvas.clear()
         with self.canvas:
             Color(*self.circle_color)
-            # Ball-oda size multiplier-a konjam athigam panni irukken
             size = min(self.width, self.height) * 0.72
             x = self.center_x - size / 2
             y = self.center_y - size / 2
@@ -119,28 +118,31 @@ class HueStrikeApp(App):
         self.info_layout.add_widget(self.timer_label)
         self.main_layout.add_widget(self.info_layout)
 
-        # Height-a konjam kuraichirukken
-        self.circle_container = FloatLayout(size_hint=(1, 0.36))
-        self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
+        # Intha FloatLayout kullaye ippo Text & Ball irandu varum
+        self.circle_container = FloatLayout(size_hint=(1, 0.38))
+        
+        # Ball-a konjam mela thookirukken (center_y: 0.55)
+        self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.55})
         self.circle_container.add_widget(self.circle_widget)
         
         self.word_label = Label(
             text="", font_size='32sp', bold=True,
-            color=(1, 1, 1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
+            color=(1, 1, 1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.55}
         )
         self.circle_container.add_widget(self.word_label)
-        self.main_layout.add_widget(self.circle_container)
 
-        # Intha text-a top-la align aaga maathirukken (valign='top')
+        # Text-a FloatLayout kulla potu exact-a ball kku keela ukkara vechirukken (y: 0.05)
         self.mode_label = Label(
             text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), 
-            size_hint=(1, 0.06), halign='center', valign='top'
+            size_hint=(1, 0.15), pos_hint={'center_x': 0.5, 'y': 0.05}, 
+            halign='center', valign='center'
         )
-        self.mode_label.bind(size=lambda instance, value: setattr(instance, 'text_size', value))
-        self.main_layout.add_widget(self.mode_label)
+        self.circle_container.add_widget(self.mode_label)
 
-        # Grid kku konjam extra space (0.44) kuduthurukken
-        self.controls_layout = FloatLayout(size_hint=(1, 0.44))
+        self.main_layout.add_widget(self.circle_container)
+
+        # Keela irukka Grid kku space konjam adjust pannirukken (0.48)
+        self.controls_layout = FloatLayout(size_hint=(1, 0.48))
         self.main_layout.add_widget(self.controls_layout)
 
         self.show_main_menu()
@@ -486,4 +488,4 @@ class HueStrikeApp(App):
 
 if __name__ == "__main__":
     HueStrikeApp().run()
-    
+        
