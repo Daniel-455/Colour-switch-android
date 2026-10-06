@@ -1,5 +1,17 @@
-import random
+"""
+HUE STRIKE - Stroop-style brain game (Python + Kivy)
+- No audio files needed: every sound effect and the background music are
+  synthesized in code on first launch and cached in the app's data folder.
+- Android: add VIBRATE to android.permissions in buildozer.spec.
+"""
+import os
+import math
+import wave
+import array
 import json
+import random
+import datetime
+
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -9,24 +21,39 @@ from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 from kivy.uix.scrollview import ScrollView
-from kivy.graphics import Color, Ellipse
+from kivy.uix.progressbar import ProgressBar
+from kivy.graphics import Color, Ellipse, Line
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.core.audio import SoundLoader
 from kivy.animation import Animation
+from kivy.metrics import dp
 from kivy.utils import platform
 
+# ----------------------------------------------------------------------------
+# Vibration (Android)
+# ----------------------------------------------------------------------------
 vibrator = None
+VibrationEffect = None
+SDK_INT = 0
 if platform == 'android':
     try:
         from jnius import autoclass
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
         Context = autoclass('android.content.Context')
         vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
+        SDK_INT = autoclass('android.os.Build$VERSION').SDK_INT
+        if SDK_INT >= 26:
+            VibrationEffect = autoclass('android.os.VibrationEffect')
     except Exception as e:
         print(f"Vibration initialization failed: {e}")
 
-Window.clearcolor = (0.07, 0.07, 0.09, 1)
+# ----------------------------------------------------------------------------
+# Constants
+# ----------------------------------------------------------------------------
+BG = (0.07, 0.07, 0.09, 1)
+TIME_LIMIT = 5.0
+MAX_LIVES = 3
 
 COLORS = {
     "RED": (1.0, 0.2, 0.2, 1),
@@ -36,19 +63,136 @@ COLORS = {
     "PURPLE": (0.7, 0.2, 0.9, 1),
     "ORANGE": (1.0, 0.5, 0.0, 1),
     "CYAN": (0.0, 0.85, 1.0, 1),
-    "PINK": (1.0, 0.3, 0.7, 1)
+    "PINK": (1.0, 0.3, 0.7, 1),
 }
-
 COLOR_NAMES = list(COLORS.keys())
 
+MILESTONES = {
+    10: ("NICE!", (0.3, 1, 0.6, 1)),
+    25: ("GREAT!", (0.3, 0.8, 1, 1)),
+    50: ("AMAZING!", (1, 0.8, 0.2, 1)),
+    75: ("UNSTOPPABLE!", (1, 0.4, 0.8, 1)),
+    100: ("LEGENDARY!", (1, 0.3, 0.3, 1)),
+}
+
+BADGES = {
+    "streak5": ("Hot Streak", "Get 5 correct answers in a row"),
+    "streak15": ("On Fire", "Get 15 correct answers in a row"),
+    "sharp25": ("Sharp Mind", "25 correct answers in one game"),
+    "master50": ("Brain Master", "50 correct answers in one game"),
+    "hard15": ("Hard Hitter", "15 correct answers in Hard mode"),
+    "flawless": ("Flawless", "20 correct answers without losing a life"),
+    "golden": ("Golden Touch", "Win a golden bonus round"),
+    "smart": ("Smart Move", "Use a power-up"),
+    "daily": ("Daily Done", "Complete the daily challenge"),
+    "regular": ("Regular", "Play 10 games"),
+}
+
+# ----------------------------------------------------------------------------
+# Sound synthesis (no audio files needed)
+# ----------------------------------------------------------------------------
+def ev(f0, start, dur, vol=0.5, f1=None, kind="sine", decay=4.0):
+    """One note event: start/end frequency (glide), start time, duration..."""
+    return (f0, f0 if f1 is None else f1, start, dur, vol, kind, decay)
+
+
+def render(events, length, sr=22050, loop=False):
+    n = int(length * sr)
+    buf = [0.0] * n
+    twopi = 2 * math.pi
+    att = max(1, int(0.004 * sr))
+    rel = max(1, int(0.01 * sr))
+    for f0, f1, start, dur, vol, kind, decay in events:
+        s = int(start * sr)
+        m = max(1, int(dur * sr))
+        phase = 0.0
+        for i in range(m):
+            t = i / m
+            phase += twopi * (f0 + (f1 - f0) * t) / sr
+            if kind == "sine":
+                v = math.sin(phase) + 0.3 * math.sin(2 * phase) + 0.1 * math.sin(3 * phase)
+            elif kind == "soft":
+                v = math.sin(phase)
+            elif kind == "saw":
+                v = 2 * ((phase / twopi) % 1.0) - 1
+            else:  # square
+                v = 0.7 if math.sin(phase) > 0 else -0.7
+            env = min(1.0, i / att) * min(1.0, (m - i) / rel) * math.exp(-decay * t)
+            idx = s + i
+            if idx >= n:
+                if loop:
+                    idx %= n
+                else:
+                    break
+            buf[idx] += v * env * vol
+    return array.array('h', [int(max(-1.0, min(1.0, x)) * 30000) for x in buf])
+
+
+def write_wav(path, data, sr=22050):
+    with wave.open(path, 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(data.tobytes())
+
+
+def sfx_defs():
+    d = {}
+    d["click"] = ([ev(1000, 0, .05, .4, decay=7)], .08)
+    d["tick"] = ([ev(1200, 0, .05, .3, kind="square", decay=9)], .08)
+    for k in range(5):  # correct sound gets higher with the combo multiplier
+        r = 2 ** (2 * k / 12.0)
+        d["correct%d" % k] = ([ev(523.25 * r, 0, .10, .5), ev(659.25 * r, .07, .10, .5),
+                               ev(783.99 * r, .14, .20, .5, decay=5)], .4)
+    d["wrong"] = ([ev(260, 0, .35, .35, f1=90, kind="saw", decay=3)], .4)
+    d["gameover"] = ([ev(392, 0, .3, .5, kind="soft", decay=3), ev(329.6, .25, .3, .5, kind="soft", decay=3),
+                      ev(261.6, .5, .3, .5, kind="soft", decay=3), ev(196, .75, .7, .5, kind="soft", decay=2.5)], 1.5)
+    d["freeze"] = ([ev(2093, 0, .5, .3, kind="soft", decay=5), ev(2637, .08, .5, .25, kind="soft", decay=5),
+                    ev(3136, .16, .6, .22, kind="soft", decay=5), ev(800, 0, .3, .2, f1=300, kind="soft", decay=4)], .9)
+    d["fifty"] = ([ev(500, 0, .12, .3, f1=1000, kind="square", decay=4),
+                   ev(1000, .1, .12, .28, f1=500, kind="square", decay=4)], .3)
+    d["skip"] = ([ev(400, 0, .22, .4, f1=1200, kind="soft", decay=3)], .25)
+    d["recharge"] = ([ev(659, 0, .1, .4, kind="soft"), ev(880, .08, .1, .4, kind="soft"),
+                      ev(1318, .16, .25, .4, kind="soft", decay=4)], .5)
+    d["combo"] = ([ev(784, 0, .1, .5), ev(988, .08, .1, .5), ev(1175, .16, .1, .5),
+                   ev(1568, .24, .3, .5, decay=4)], .6)
+    d["milestone"] = ([ev(523, 0, .12, .5), ev(659, .1, .12, .5), ev(784, .2, .12, .5), ev(1046, .3, .12, .5)] +
+                      [ev(f, .42, .7, .3, decay=3) for f in (523, 659, 784, 1046)], 1.2)
+    d["newbest"] = ([ev(1046, 0, .1, .45), ev(1318, .08, .1, .45), ev(1568, .16, .1, .45),
+                     ev(2093, .24, .1, .45), ev(1568, .34, .5, .4, decay=3)], .9)
+    d["golden"] = ([ev(1319, 0, .4, .4, kind="soft", decay=3), ev(1760, 0, .4, .3, kind="soft", decay=3),
+                    ev(2637, .05, .3, .2, kind="soft", decay=4)], .5)
+    d["badge"] = ([ev(784, 0, .12, .45), ev(1046, .1, .12, .45), ev(1318, .2, .12, .45),
+                   ev(1568, .3, .45, .45, decay=3)], .8)
+    return d
+
+
+def music_def():
+    chords = [(220, 261.6, 329.6, 440), (174.6, 220, 261.6, 349.2),
+              (261.6, 329.6, 392, 523.3), (196, 246.9, 293.7, 392)]
+    pattern = [0, 1, 2, 3, 2, 1, 2, 1]
+    events = []
+    for c, ch in enumerate(chords):
+        t0 = c * 2.0
+        events.append(ev(ch[0] / 2, t0, 2.0, .32, kind="soft", decay=1.2))
+        for j, p in enumerate(pattern):
+            events.append(ev(ch[p], t0 + j * .25, .5, .2, kind="soft", decay=3))
+    return events, 8.0
+
+
+# ----------------------------------------------------------------------------
+# Widgets
+# ----------------------------------------------------------------------------
 class CircleWidget(Widget):
     def __init__(self, **kwargs):
         super(CircleWidget, self).__init__(**kwargs)
         self.circle_color = (1, 1, 1, 1)
+        self.golden = False
         self.bind(pos=self.update_canvas, size=self.update_canvas)
 
-    def set_data(self, color_tuple):
+    def set_data(self, color_tuple, golden=False):
         self.circle_color = color_tuple
+        self.golden = golden
         self.update_canvas()
 
     def update_canvas(self, *args):
@@ -56,436 +200,264 @@ class CircleWidget(Widget):
         with self.canvas:
             Color(*self.circle_color)
             size = min(self.width, self.height) * 0.72
-            x = self.center_x - size / 2
-            y = self.center_y - size / 2
-            Ellipse(pos=(x, y), size=(size, size))
+            Ellipse(pos=(self.center_x - size / 2, self.center_y - size / 2), size=(size, size))
+            if self.golden:
+                Color(1, 0.84, 0, 1)
+                Line(circle=(self.center_x, self.center_y, size / 2 + 8), width=3.5)
 
-class HueStrikeApp(App):
-    def build(self):
-        self.title = "Hue Strike"
-        self.score = 0
-        self.correct_count = 0
-        self.time_left = 5
-        self.game_mode = ""
-        self.easy_mode = ""
-        self.timer_event = None
-        self.sound_muted = False
-        self.freeze_used = False
-        self.is_frozen = False
-        self.scores_data = self.load_scores()
 
-        try:
-            self.snd_click = SoundLoader.load('click.mp3')
-            self.snd_correct = SoundLoader.load('correct.mp3')
-            self.snd_wrong = SoundLoader.load('wrong.mp3')
-        except Exception as e:
-            print(f"Error loading sound files: {e}")
+class LivesWidget(Widget):
+    def __init__(self, **kwargs):
+        super(LivesWidget, self).__init__(**kwargs)
+        self.lives = 0
+        self.total = 0
+        self.bind(pos=self.redraw, size=self.redraw)
 
-        self.main_layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
+    def set_lives(self, lives, total=None):
+        self.lives = lives
+        if total is not None:
+            self.total = total
+        self.redraw()
 
-        header = FloatLayout(size_hint=(1, 0.08))
-        
-        self.btn_back = Button(
-            text="BACK", font_size='14sp', bold=True, size_hint=(0.22, 0.65),
-            pos_hint={'x': 0.03, 'center_y': 0.5}, background_normal='',
-            background_color=(0.25, 0.25, 0.35, 1), opacity=0, disabled=True
-        )
-        self.btn_back.bind(on_release=self.go_back_to_menu)
-
-        self.title_label = Label(
-            text="HUE STRIKE", font_size='22sp', bold=True,
-            color=(0.1, 0.9, 0.9, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5}
-        )
-        
-        self.btn_mute = Button(
-            text="SOUND", font_size='14sp', bold=True, size_hint=(0.22, 0.65),
-            pos_hint={'right': 0.97, 'center_y': 0.5}, background_normal='',
-            background_color=(0.15, 0.5, 0.2, 1)
-        )
-        self.btn_mute.bind(on_release=self.toggle_mute)
-
-        header.add_widget(self.btn_back)
-        header.add_widget(self.title_label)
-        header.add_widget(self.btn_mute)
-        self.main_layout.add_widget(header)
-
-        self.info_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.06))
-        self.score_label = Label(text="Score: 0", font_size='15sp', color=(1, 1, 1, 1))
-        self.best_label = Label(text="Best: 0", font_size='15sp', color=(1, 0.8, 0.2, 1))
-        self.timer_label = Label(text="Time: 5", font_size='15sp', color=(1, 0.3, 0.3, 1))
-        self.info_layout.add_widget(self.score_label)
-        self.info_layout.add_widget(self.best_label)
-        self.info_layout.add_widget(self.timer_label)
-        self.main_layout.add_widget(self.info_layout)
-
-        # Intha FloatLayout kullaye ippo Text & Ball irandu varum
-        self.circle_container = FloatLayout(size_hint=(1, 0.38))
-        
-        # Ball-a konjam mela thookirukken (center_y: 0.55)
-        self.circle_widget = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.55})
-        self.circle_container.add_widget(self.circle_widget)
-        
-        self.word_label = Label(
-            text="", font_size='32sp', bold=True,
-            color=(1, 1, 1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.55}
-        )
-        self.circle_container.add_widget(self.word_label)
-
-        # Text-a FloatLayout kulla potu exact-a ball kku keela ukkara vechirukken (y: 0.05)
-        self.mode_label = Label(
-            text="", font_size='20sp', bold=True, color=(1, 0.9, 0.2, 1), 
-            size_hint=(1, 0.15), pos_hint={'center_x': 0.5, 'y': 0.05}, 
-            halign='center', valign='center'
-        )
-        self.circle_container.add_widget(self.mode_label)
-
-        self.main_layout.add_widget(self.circle_container)
-
-        # Keela irukka Grid kku space konjam adjust pannirukken (0.48)
-        self.controls_layout = FloatLayout(size_hint=(1, 0.48))
-        self.main_layout.add_widget(self.controls_layout)
-
-        self.show_main_menu()
-        return self.main_layout
-
-    def go_back_to_menu(self, *args):
-        if self.timer_event:
-            self.timer_event.cancel()
-        self.show_main_menu()
-
-    def play_sound(self, sound_obj):
-        if not self.sound_muted and sound_obj:
-            try:
-                if sound_obj.state == 'play':
-                    sound_obj.stop()
-                sound_obj.volume = 1.0
-                sound_obj.play()
-            except Exception as e:
-                print(f"Sound play error: {e}")
-
-    def vibrate(self, duration=30):
-        if vibrator:
-            try:
-                vibrator.vibrate(duration)
-            except Exception as e:
-                print(f"Vibrate error: {e}")
-
-    def toggle_mute(self, *args):
-        self.sound_muted = not self.sound_muted
-        if self.sound_muted:
-            self.btn_mute.text = "MUTED"
-            self.btn_mute.background_color = (0.6, 0.2, 0.2, 1)
-        else:
-            self.btn_mute.text = "SOUND"
-            self.btn_mute.background_color = (0.15, 0.5, 0.2, 1)
-
-    def load_scores(self):
-        try:
-            with open("best_scores.json", "r") as f:
-                return json.load(f)
-        except:
-            return {"EASY": 0, "HARD": 0, "PRACTICE": 0}
-
-    def save_scores(self):
-        try:
-            with open("best_scores.json", "w") as f:
-                json.dump(self.scores_data, f)
-        except:
-            pass
-
-    def show_main_menu(self):
-        self.play_sound(self.snd_click)
-        self.vibrate(20)
-        self.btn_back.opacity = 0
-        self.btn_back.disabled = True
-
-        self.controls_layout.clear_widgets()
-        self.mode_label.text = ""
-        self.word_label.text = ""
-        self.circle_widget.set_data((0.07, 0.07, 0.09, 1))
-        self.best_label.text = "Best: -"
-        Window.clearcolor = (0.07, 0.07, 0.09, 1)
-
-        layout = BoxLayout(orientation='vertical', spacing=8, size_hint=(0.85, 0.95), pos_hint={'center_x': 0.5, 'center_y': 0.5})
-
-        btn_easy = Button(text="EASY MODE", font_size='16sp', bold=True, background_color=(0.2, 0.8, 0.4, 1), background_normal='')
-        btn_easy.bind(on_release=lambda x: self.choose_easy_mode())
-
-        btn_hard = Button(text="HARD MODE", font_size='16sp', bold=True, background_color=(0.9, 0.2, 0.3, 1), background_normal='')
-        btn_hard.bind(on_release=lambda x: self.start_game("HARD"))
-
-        btn_practice = Button(text="PRACTICE MODE (NO TIMER)", font_size='14sp', bold=True, background_color=(0.6, 0.3, 0.9, 1), background_normal='')
-        btn_practice.bind(on_release=lambda x: self.start_game("PRACTICE"))
-
-        btn_instructions = Button(text="INSTRUCTIONS", font_size='14sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
-        btn_instructions.bind(on_release=lambda x: self.show_instructions_popup())
-
-        btn_best_score = Button(text="LEADERBOARD", font_size='14sp', bold=True, background_color=(1.0, 0.6, 0.1, 1), background_normal='')
-        btn_best_score.bind(on_release=lambda x: self.show_best_score_popup())
-
-        layout.add_widget(btn_easy)
-        layout.add_widget(btn_hard)
-        layout.add_widget(btn_practice)
-        layout.add_widget(btn_instructions)
-        layout.add_widget(btn_best_score)
-        self.controls_layout.add_widget(layout)
-
-    def show_instructions_popup(self):
-        self.play_sound(self.snd_click)
-        self.vibrate(20)
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        scroll = ScrollView(size_hint=(1, 0.8))
-        text = (
-            "[b]HUE STRIKE INSTRUCTIONS[/b]\n\n"
-            "1. [color=3388ff]EASY MODE:[/color]\nSelect MATCH COLOR or MATCH WORD.\n\n"
-            "2. [color=ff3333]HARD MODE:[/color]\nFollow prompt: Ball Color or Written Word.\n\n"
-            "3. [color=aa55ff]PRACTICE MODE:[/color]\nNo timer! Train your instincts.\n\n"
-            "4. [color=00ffff]POWER-UP [FREEZE]:[/color]\nPress FREEZE button once per game to pause timer for 3s!"
-        )
-        lbl = Label(text=text, markup=True, font_size='14sp', size_hint_y=None, halign='left', valign='top')
-        lbl.bind(width=lambda instance, value: setattr(instance, 'text_size', (value, None)))
-        lbl.bind(texture_size=lambda instance, value: setattr(instance, 'height', value[1]))
-        scroll.add_widget(lbl)
-        btn = Button(text="CLOSE", size_hint=(1, 0.18), bold=True)
-        content.add_widget(scroll)
-        content.add_widget(btn)
-        popup = Popup(title="Instructions", content=content, size_hint=(0.9, 0.75))
-        btn.bind(on_release=lambda x: (self.play_sound(self.snd_click), self.vibrate(20), popup.dismiss()))
-        popup.open()
-
-    def show_best_score_popup(self):
-        self.play_sound(self.snd_click)
-        self.vibrate(20)
-        content = BoxLayout(orientation='vertical', padding=15, spacing=15)
-        text = (
-            f"[size=20sp][b]HIGH SCORES LEADERBOARD[/b][/size]\n\n"
-            f"[color=33ff88]EASY MODE:[/color] {self.scores_data.get('EASY', 0)}\n"
-            f"[color=ff3366]HARD MODE:[/color] {self.scores_data.get('HARD', 0)}\n"
-            f"[color=aa55ff]PRACTICE MODE:[/color] {self.scores_data.get('PRACTICE', 0)}"
-        )
-        lbl = Label(text=text, markup=True, font_size='18sp', halign='center')
-        btn = Button(text="CLOSE", size_hint=(1, 0.25), bold=True)
-        content.add_widget(lbl)
-        content.add_widget(btn)
-        popup = Popup(title="Leaderboard", content=content, size_hint=(0.8, 0.5))
-        btn.bind(on_release=lambda x: (self.play_sound(self.snd_click), self.vibrate(20), popup.dismiss()))
-        popup.open()
-
-    def choose_easy_mode(self):
-        self.play_sound(self.snd_click)
-        self.vibrate(20)
-        self.btn_back.opacity = 1
-        self.btn_back.disabled = False
-        self.controls_layout.clear_widgets()
-        layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.6), pos_hint={'center_x': 0.5, 'center_y': 0.5})
-        self.mode_label.text = "EASY: CHOOSE SUB-MODE"
-
-        btn_color = Button(text="MATCH COLOR", font_size='18sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
-        btn_color.bind(on_release=lambda x: self.select_easy_submode("COLOR"))
-
-        btn_word = Button(text="MATCH WORD", font_size='18sp', bold=True, background_color=(1.0, 0.6, 0.2, 1), background_normal='')
-        btn_word.bind(on_release=lambda x: self.select_easy_submode("WORD"))
-
-        layout.add_widget(btn_color)
-        layout.add_widget(btn_word)
-        self.controls_layout.add_widget(layout)
-
-    def select_easy_submode(self, mode):
-        self.easy_mode = mode
-        self.start_game("EASY")
-
-    def start_game(self, mode):
-        self.play_sound(self.snd_click)
-        self.vibrate(20)
-        self.btn_back.opacity = 1
-        self.btn_back.disabled = False
-
-        self.game_mode = mode
-        self.score = 0
-        self.correct_count = 0
-        self.freeze_used = False
-        self.is_frozen = False
-        self.score_label.text = "Score: 0"
-        self.best_label.text = f"Best: {self.scores_data.get(mode, 0)}"
-        self.setup_game_buttons()
-        self.new_round()
-
-    def setup_game_buttons(self):
-        self.controls_layout.clear_widgets()
-        
-        if self.game_mode != "PRACTICE":
-            self.btn_freeze = Button(
-                text="FREEZE (3s)", font_size='13sp', bold=True,
-                size_hint=(0.98, 0.15), pos_hint={'center_x': 0.5, 'top': 1.0},
-                background_color=(0.0, 0.7, 0.9, 1), background_normal=''
-            )
-            self.btn_freeze.bind(on_release=self.activate_freeze)
-            self.controls_layout.add_widget(self.btn_freeze)
-
-        grid = GridLayout(cols=4, spacing=6, size_hint=(0.98, 0.8), pos_hint={'center_x': 0.5, 'y': 0.0})
-        self.answer_buttons = {}
-        for name in COLOR_NAMES:
-            btn = Button(text=name, font_size='11sp', bold=True, background_normal='', background_color=COLORS[name])
-            btn.bind(on_release=lambda instance, n=name: self.check_answer(n))
-            self.answer_buttons[name] = btn
-            grid.add_widget(btn)
-
-        self.controls_layout.add_widget(grid)
-
-    def activate_freeze(self, *args):
-        if not self.freeze_used and not self.is_frozen:
-            self.play_sound(self.snd_click)
-            self.vibrate(30)
-            self.freeze_used = True
-            self.is_frozen = True
-            self.btn_freeze.disabled = True
-            self.btn_freeze.text = "FROZEN!"
-            self.timer_label.text = f"Time: {self.time_left} [FROZEN]"
-            Clock.schedule_once(self.unfreeze, 3.0)
-
-    def unfreeze(self, dt):
-        self.is_frozen = False
-        self.timer_label.text = f"Time: {self.time_left}"
-
-    def calculate_time(self):
-        if self.game_mode == "EASY":
-            if self.correct_count <= 10: return 5
-            elif self.correct_count <= 20: return 4
-            elif self.correct_count <= 30: return 3
-            elif self.correct_count <= 40: return 2
-            else: return 1
-        else:
-            if self.correct_count <= 15: return 5
-            elif self.correct_count <= 30: return 4
-            elif self.correct_count <= 45: return 3
-            elif self.correct_count <= 60: return 2
-            else: return 1
-
-    def update_dynamic_theme(self):
-        if self.score >= 50:
-            Window.clearcolor = (0.12, 0.05, 0.15, 1)
-        elif self.score >= 20:
-            Window.clearcolor = (0.05, 0.1, 0.15, 1)
-        else:
-            Window.clearcolor = (0.07, 0.07, 0.09, 1)
-
-    def new_round(self, *args):
-        if self.timer_event:
-            self.timer_event.cancel()
-
-        self.update_dynamic_theme()
-
-        if self.game_mode == "PRACTICE":
-            self.timer_label.text = "Time: ∞"
-        else:
-            self.time_left = self.calculate_time()
-            self.timer_label.text = f"Time: {self.time_left}"
-
-        actual_color = random.choice(COLOR_NAMES)
-        word_color = random.choice(COLOR_NAMES)
-
-        if self.game_mode == "EASY":
-            current_mode = self.easy_mode
-        elif self.game_mode == "PRACTICE":
-            current_mode = random.choice(["COLOR", "WORD"])
-        else:
-            current_mode = random.choice(["COLOR", "WORD"])
-
-        self.circle_widget.set_data(COLORS[actual_color])
-        self.word_label.text = word_color
-
-        if current_mode == "COLOR":
-            self.mode_label.text = "MATCH BALL COLOR!"
-            self.correct_answer = actual_color
-        else:
-            self.mode_label.text = "MATCH WRITTEN WORD!"
-            self.correct_answer = word_color
-
-        if self.game_mode != "PRACTICE":
-            self.timer_event = Clock.schedule_interval(self.countdown, 1.0)
-
-    def countdown(self, dt):
-        if self.is_frozen:
+    def redraw(self, *args):
+        self.canvas.clear()
+        if self.total <= 0:
             return
+        d = min(self.height * 0.6, self.width / (self.total * 1.6))
+        gap = d * 0.5
+        x0 = self.center_x - (self.total * d + (self.total - 1) * gap) / 2
+        with self.canvas:
+            for i in range(self.total):
+                x = x0 + i * (d + gap)
+                if i < self.lives:
+                    Color(1, 0.25, 0.35, 1)
+                    Ellipse(pos=(x, self.center_y - d / 2), size=(d, d))
+                else:
+                    Color(0.35, 0.35, 0.4, 1)
+                    Line(circle=(x + d / 2, self.center_y, d / 2), width=1.2)
 
-        self.time_left -= 1
-        self.timer_label.text = f"Time: {self.time_left}"
 
-        if self.time_left <= 0:
-            if self.timer_event:
-                self.timer_event.cancel()
-            self.trigger_game_over("TIME'S UP!")
+def blink_widget(w):
+    Animation.cancel_all(w)
+    (Animation(opacity=.25, duration=.12) + Animation(opacity=1, duration=.12) +
+     Animation(opacity=.25, duration=.12) + Animation(opacity=1, duration=.12)).start(w)
 
-    def animate_floating_text(self, text):
-        lbl = Label(text=text, font_size='24sp', bold=True, color=(0, 1, 0.5, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
-        self.circle_container.add_widget(lbl)
-        anim = Animation(pos_hint={'center_x': 0.5, 'center_y': 0.8}, opacity=0, duration=0.6)
-        anim.bind(on_complete=lambda a, w: self.circle_container.remove_widget(lbl))
+
+def S(wait, *fns):
+    """A tutorial step: run all fns now, then wait `wait` seconds."""
+    return (wait, lambda: [f() for f in fns])
+
+
+# ----------------------------------------------------------------------------
+# Tutorial (self-playing demo game)
+# ----------------------------------------------------------------------------
+class DemoBoard(BoxLayout):
+    def __init__(self, app, **kwargs):
+        super(DemoBoard, self).__init__(orientation='vertical', spacing=4, **kwargs)
+        self.app = app
+        self.caption = Label(text="", font_size='15sp', markup=True, halign='center',
+                             valign='middle', size_hint=(1, .2))
+        self.caption.bind(size=lambda i, v: setattr(i, 'text_size', (v[0] - 10, v[1])))
+        self.add_widget(self.caption)
+
+        top = BoxLayout(size_hint=(1, .07))
+        self.lives = LivesWidget(size_hint=(.3, 1))
+        self.combo = Label(text="", font_size='13sp', bold=True, color=(1, .7, .2, 1), size_hint=(.4, 1))
+        self.tlabel = Label(text="Time: 5", font_size='13sp', color=(1, .3, .3, 1), size_hint=(.3, 1))
+        for w in (self.lives, self.combo, self.tlabel):
+            top.add_widget(w)
+        self.add_widget(top)
+
+        self.bar = ProgressBar(max=1, value=1, size_hint=(1, .03))
+        self.add_widget(self.bar)
+
+        self.area = FloatLayout(size_hint=(1, .28))
+        self.ball = CircleWidget(size_hint=(1, 1), pos_hint={'center_x': .5, 'center_y': .6})
+        self.word = Label(text="", font_size='26sp', bold=True, pos_hint={'center_x': .5, 'center_y': .6})
+        self.prompt = Label(text="", font_size='16sp', bold=True, color=(1, .9, .2, 1),
+                            size_hint=(1, .18), pos_hint={'center_x': .5, 'y': 0})
+        for w in (self.ball, self.word, self.prompt):
+            self.area.add_widget(w)
+        self.add_widget(self.area)
+
+        powers = BoxLayout(size_hint=(1, .09), spacing=4)
+        self.pw = {}
+        for key, txt, col in (("freeze", "FREEZE", (0, .7, .9, 1)), ("fifty", "50/50", (.6, .3, .9, 1)),
+                              ("skip", "SKIP", (1, .55, .1, 1))):
+            b = Button(text=txt, font_size='12sp', bold=True, background_normal='', background_color=col)
+            self.pw[key] = b
+            powers.add_widget(b)
+        self.add_widget(powers)
+
+        grid = GridLayout(cols=4, spacing=4, size_hint=(1, .33))
+        self.btns = {}
+        for n in COLOR_NAMES:
+            b = Button(text=n, font_size='10sp', bold=True, background_normal='', background_color=COLORS[n])
+            self.btns[n] = b
+            grid.add_widget(b)
+        self.add_widget(grid)
+
+    # --- helpers used by the script ---
+    def reset(self):
+        Animation.cancel_all(self.bar)
+        self.bar.value = 1
+        self.bar.opacity = 1
+        self.lives.set_lives(3, 3)
+        self.combo.text = ""
+        self.tlabel.text = "Time: 5"
+        for b in list(self.btns.values()) + list(self.pw.values()):
+            Animation.cancel_all(b)
+            b.opacity = 1
+        self.ball.set_data((.3, .3, .35, 1), False)
+        self.word.text = ""
+        self.prompt.text = ""
+        self.caption.text = ""
+
+    def say(self, text):
+        self.caption.text = text
+
+    def show(self, ball, word, prompt, golden=False):
+        Animation.cancel_all(self.bar)
+        self.bar.value = 1
+        self.bar.opacity = 1
+        self.tlabel.text = "Time: 5"
+        for b in self.btns.values():
+            Animation.cancel_all(b)
+            b.opacity = 1
+        self.ball.set_data(COLORS[ball], golden)
+        self.word.text = word
+        self.prompt.text = prompt
+        if golden:
+            self.app.sfx("golden")
+
+    def practice(self):
+        self.bar.opacity = 0
+        self.tlabel.text = "Time: \u221e"
+        self.lives.set_lives(0, 0)
+
+    def tap(self, name):
+        blink_widget(self.btns[name])
+        self.app.sfx("click")
+
+    def tap_power(self, key):
+        b = self.pw[key]
+        Animation.cancel_all(b)
+        (Animation(opacity=.25, duration=.12) + Animation(opacity=1, duration=.12) +
+         Animation(opacity=.25, duration=.12) + Animation(opacity=1, duration=.12) +
+         Animation(opacity=.35, duration=.1)).start(b)
+        self.app.sfx("click")
+
+    def float(self, text, color, size='24sp', y0=.5, y1=.85):
+        lbl = Label(text=text, font_size=size, bold=True, color=color, size_hint=(1, .3),
+                    pos_hint={'center_x': .5, 'center_y': y0})
+        self.area.add_widget(lbl)
+        anim = Animation(pos_hint={'center_x': .5, 'center_y': y1}, opacity=0, duration=1.0, t='in_quad')
+        anim.bind(on_complete=lambda a, w: self.area.remove_widget(lbl))
         anim.start(lbl)
 
-    def check_answer(self, answer):
-        if self.timer_event:
-            self.timer_event.cancel()
+    def good(self, text="+1", snd="correct0"):
+        self.float(text, (.3, 1, .5, 1))
+        self.app.sfx(snd)
 
-        if answer == self.correct_answer:
-            self.play_sound(self.snd_correct)
-            self.vibrate(60)
-            self.correct_count += 1
-            pts = 1 if self.game_mode == "EASY" else 10
-            self.score += pts
-            self.score_label.text = f"Score: {self.score}"
+    def drain(self, to, sec):
+        Animation.cancel_all(self.bar)
+        Animation(value=to, duration=sec).start(self.bar)
 
-            self.animate_floating_text(f"+{pts}")
+    def hold(self):
+        Animation.cancel_all(self.bar)
 
-            current_best = self.scores_data.get(self.game_mode, 0)
-            if self.score > current_best:
-                self.scores_data[self.game_mode] = self.score
-                self.best_label.text = f"Best: {self.score}"
-                self.save_scores()
+    def lose_life(self, left):
+        self.hold()
+        self.lives.set_lives(left, 3)
+        self.float("-1 LIFE", (1, .3, .35, 1))
+        self.app.sfx("wrong")
 
-            Clock.schedule_once(self.new_round, 0.15)
+    def streak(self, n):
+        mult = min(1 + n // 5, 5)
+        self.combo.text = "STREAK %d  x%d" % (n, mult)
+        if n % 5 == 0:
+            self.float("COMBO x%d!" % mult, (1, .7, .2, 1), '28sp')
+            self.app.sfx("combo")
         else:
-            self.trigger_game_over("WRONG ANSWER!")
+            self.float("+1", (.3, 1, .5, 1))
+            self.app.sfx("correct%d" % (mult - 1))
 
-    def trigger_game_over(self, reason):
-        self.play_sound(self.snd_wrong)
-        self.vibrate(250)
+    def freeze_on(self):
+        self.hold()
+        self.tlabel.text = "FROZEN 3s"
+        self.float("FROZEN!", (0, .85, 1, 1), '28sp')
+        self.app.sfx("freeze")
 
-        def blink(count):
-            if count >= 8:
-                Window.clearcolor = (0.07, 0.07, 0.09, 1)
-                self.game_over(reason)
-                return
-            if count % 2 == 0:
-                Window.clearcolor = (0.7, 0.05, 0.05, 1)
-            else:
-                Window.clearcolor = (0.07, 0.07, 0.09, 1)
-            Clock.schedule_once(lambda dt: blink(count + 1), 0.1)
+    def freeze_off(self):
+        self.tlabel.text = "Time: 3"
+        self.drain(.2, 1.5)
 
-        blink(0)
+    def fifty(self, correct):
+        wrong = [n for n in COLOR_NAMES if n != correct][:4]
+        for n in wrong:
+            Animation(opacity=.12, duration=.3).start(self.btns[n])
+        self.app.sfx("fifty")
 
-    def game_over(self, reason):
-        if self.timer_event:
-            self.timer_event.cancel()
+    def skip(self):
+        self.float("SKIPPED", (1, .6, .2, 1), '26sp')
+        self.app.sfx("skip")
 
-        self.controls_layout.clear_widgets()
-        layout = BoxLayout(orientation='vertical', spacing=10, size_hint=(0.85, 0.85), pos_hint={'center_x': 0.5, 'center_y': 0.5})
+    def recharge(self):
+        for b in self.pw.values():
+            b.opacity = .35
+        Animation(opacity=1, duration=.4).start(self.pw["fifty"])
+        self.float("RECHARGED!", (.3, 1, .6, 1), '26sp')
+        self.app.sfx("recharge")
 
-        lbl_reason = Label(text=reason, font_size='22sp', bold=True, color=(1, 0.2, 0.2, 1))
-        lbl_score = Label(text=f"Score: {self.score}", font_size='18sp')
 
-        btn_retry = Button(text="PLAY AGAIN", font_size='18sp', bold=True, background_color=(0.2, 0.8, 0.4, 1), background_normal='')
-        btn_retry.bind(on_release=lambda x: self.start_game(self.game_mode))
-
-        btn_menu = Button(text="MAIN MENU", font_size='16sp', bold=True, background_color=(0.2, 0.6, 1.0, 1), background_normal='')
-        btn_menu.bind(on_release=lambda x: self.show_main_menu())
-
-        layout.add_widget(lbl_reason)
-        layout.add_widget(lbl_score)
-        layout.add_widget(btn_retry)
-        layout.add_widget(btn_menu)
-        self.controls_layout.add_widget(layout)
-
-if __name__ == "__main__":
-    HueStrikeApp().run()
-        
+def build_pages(b):
+    return [
+        ("THE BASICS", [
+            S(3.2, lambda: b.say("You see a [b]BALL[/b] with a [b]WORD[/b] on it.\nTheir colors are often [color=ff5555]different[/color]!"),
+              lambda: b.show("BLUE", "RED", "")),
+            S(3.2, lambda: b.say("The yellow prompt tells you [b]what to match[/b].\nHere: the BALL color."),
+              lambda: b.show("BLUE", "RED", "MATCH BALL COLOR!")),
+            S(1.0, lambda: b.say("The ball is BLUE, so tap [b]BLUE[/b]!"), lambda: b.tap("BLUE")),
+            S(1.8, lambda: b.good("+1")),
+            S(3.2, lambda: b.say("New round! The prompt now says [b]WORD[/b].\nRead the word and ignore the ball."),
+              lambda: b.show("GREEN", "PINK", "MATCH WRITTEN WORD!")),
+            S(1.0, lambda: b.say("The word says PINK, so tap [b]PINK[/b]!"), lambda: b.tap("PINK")),
+            S(1.8, lambda: b.good("+1")),
+            S(3.0, lambda: b.say("Correct answer = points.\nWrong answer = you lose a life!")),
+        ]),
+        ("GAME MODES", [
+            S(3.8, lambda: b.say("[color=3388ff][b]EASY[/b][/color]: you pick COLOR or WORD once and the prompt stays the same all game. 1 point per answer."),
+              lambda: b.show("RED", "BLUE", "MATCH BALL COLOR!")),
+            S(2.0, lambda: b.show("GREEN", "ORANGE", "MATCH BALL COLOR!")),
+            S(3.8, lambda: b.say("[color=ff3333][b]HARD[/b][/color]: the prompt changes every round, so stay sharp! 10 points per answer."),
+              lambda: b.show("PURPLE", "CYAN", "MATCH WRITTEN WORD!")),
+            S(2.0, lambda: b.show("ORANGE", "GREEN", "MATCH BALL COLOR!")),
+            S(3.8, lambda: b.say("[color=aa55ff][b]PRACTICE[/b][/color]: no timer and no lives. Relax and train your instincts!"),
+              lambda: b.show("PINK", "YELLOW", "MATCH WRITTEN WORD!"), lambda: b.practice()),
+        ]),
+        ("TIMER, LIVES & COMBO", [
+            S(2.6, lambda: b.say("Every round has a [b]5 second[/b] timer.\nWatch the bar drain!"),
+              lambda: b.show("CYAN", "RED", "MATCH BALL COLOR!"), lambda: b.drain(.3, 3.0)),
+            S(1.2, lambda: b.say("Time runs out or you tap the wrong color: you lose a [color=ff4455]life[/color]. You get 3 lives."),
+              lambda: b.tap("RED")),
+            S(3.0, lambda: b.lose_life(2)),
+            S(2.5, lambda: b.say("Answer correctly in a row to build a [color=ffaa33]COMBO[/color]!"),
+              lambda: b.show("BLUE", "GREEN", "MATCH BALL COLOR!")),
+            S(.6, lambda: b.streak(1)), S(.6, lambda: b.streak(2)), S(.6, lambda: b.streak(3)),
+            S(.6, lambda: b.streak(4)), S(2.0, lambda: b.streak(5)),
+            S(3.8, lambda: b.say("Every 5 in a row raises your multiplier: x2, x3, x4, x5!\nOne mistake resets it.")),
+        ]),
+        ("POWER-UPS", [
+            S(2.2, lambda: b.say("[color=00ccee][b]FREEZE[/b][/color]: stops the timer for 3 seconds. Use it when you need time to think!"),
+              lambda: b.show("YELLOW", "PURPLE", "MATCH BALL COLOR!"), lambda: b.drain(.5, 2.2)),
+            S(1.0, lambda: b.tap_power("freeze")),
+            S(3.0, lambda: b.freeze_on(), lambda: b.say("The timer is paused. Take your time!")),
+            S(1.2, lambda: b.freeze_off(), lambda: b.tap("YELLOW")),
+            S(1.5, lambda: b.good("+1")),
+            S(3.2, lambda: b.say("[color=aa55ff][b]50/50[/b][/color]: removes 4 wrong answers, so only 4 colors are left!"),
+              lambda: b.show("ORANGE", "PINK", "MATCH BALL COLOR!")),
+            S(.8, lambda: b.tap_power("fifty")),
+            S(2.5, lambda: b.fifty("ORANGE")),
+            S(1.0, lambda: b.tap("ORANGE")),
+            S(1.5, lambda: b.good("+1")),
+            S(3.2, lambda: b.say("[color=ff9922][b]SKIP[/b][/color]: jump to a new round. No points, but [b]no life lost[/b] and your combo 
