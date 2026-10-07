@@ -1,5 +1,5 @@
 [app]
-title = Daniel
+title = Hue Strike 
 package.name = huestrike
 package.domain = org.test
 source.dir = .
