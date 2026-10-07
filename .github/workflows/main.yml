@@ -20,41 +20,31 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Ithu thaan nama pudhusa add panna Java step
       - name: Set up Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install System & Build Dependencies
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
-            ccache \
-            git \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            cmake \
-            libffi-dev \
-            libssl-dev \
-            libncurses5 \
-            zip \
-            unzip \
-            zlib1g-dev \
-            ffmpeg \
-            libsdl2-dev \
-            libsdl2-image-dev \
-            libsdl2-mixer-dev \
-            libsdl2-ttf-dev \
-            libportmidi-dev \
-            libswscale-dev \
-            libavformat-dev \
-            libavcodec-dev
-          pip install --upgrade pip setuptools buildozer cython==0.29.33
+            build-essential ccache git autoconf automake libtool \
+            pkg-config cmake libffi-dev libssl-dev libncurses5 \
+            libltdl-dev zip unzip zlib1g-dev
+          python -m pip install --upgrade pip setuptools
+          python -m pip install buildozer "cython<3"
 
       - name: Accept Android SDK Licenses
         run: |
@@ -72,4 +62,4 @@ jobs:
         with:
           name: package-debug-apk
           path: bin/*.apk
-          
+          if-no-files-found: error
