@@ -32,9 +32,7 @@ jobs:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-${{ runner.os }}-
+          key: buildozer-v2-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
 
       - name: Install System Dependencies
         run: |
@@ -46,16 +44,17 @@ jobs:
           python -m pip install --upgrade pip setuptools
           python -m pip install buildozer "cython<3"
 
-      - name: Accept Android SDK Licenses
+      - name: Pre-accept Buildozer SDK licenses
         run: |
-          mkdir -p ~/.android
-          touch ~/.android/repositories.cfg
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          SDK=~/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK/licenses
+          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e" > $SDK/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $SDK/licenses/android-sdk-preview-license
 
       - name: Build Debug APK with Buildozer
         env:
           APP_ACCEPT_SDK_LICENSE: 1
-        run: buildozer android debug
+        run: buildozer -v android debug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
